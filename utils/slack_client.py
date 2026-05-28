@@ -24,6 +24,7 @@ def upload_file_to_slack(
     filename: str,
     title: str = "",
     message: str = "",
+    thread_ts: str | None = None,
 ) -> None:
     if not _CHANNEL_ID_RE.match(channel):
         raise ValueError(
@@ -38,6 +39,7 @@ def upload_file_to_slack(
             filename=filename,
             title=title or filename,
             initial_comment=message or None,
+            thread_ts=thread_ts or None,
         )
     except SlackApiError as e:
         raise RuntimeError(f"Slack upload failed: {e.response['error']}") from e

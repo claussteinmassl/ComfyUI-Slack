@@ -32,10 +32,11 @@ class SlackSendImage:
             "optional": {
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
+                "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
             },
         }
 
-    def send(self, images, channel, filename_prefix, format, quality, title="", message=""):
+    def send(self, images, channel, filename_prefix, format, quality, title="", message="", thread_ts=""):
         client = get_client()
         ext = _FORMAT_EXT[format]
 
@@ -65,6 +66,7 @@ class SlackSendImage:
                     filename=filename,
                     title=title,
                     message=message if i == 0 else "",
+                    thread_ts=thread_ts or None,
                 )
             finally:
                 os.unlink(tmp_path)

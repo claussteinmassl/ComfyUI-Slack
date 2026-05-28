@@ -1,0 +1,60 @@
+{
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "v1-5-pruned-emaonly.safetensors" },
+    "_meta": { "title": "Load Checkpoint" }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "example.png", "upload": "image" },
+    "_meta": { "title": "SLACK_INPUT_IMAGE" }
+  },
+  "12": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["10", 0], "vae": ["4", 2] },
+    "_meta": { "title": "VAE Encode" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "a prompt will be injected here", "clip": ["4", 1] },
+    "_meta": { "title": "SLACK_PROMPT" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "text, watermark, low quality", "clip": ["4", 1] },
+    "_meta": { "title": "Negative Prompt" }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 20,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.75,
+      "model": ["4", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["12", 0]
+    },
+    "_meta": { "title": "KSampler" }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] },
+    "_meta": { "title": "VAE Decode" }
+  },
+  "9": {
+    "class_type": "SlackSendImage",
+    "inputs": {
+      "images": ["8", 0],
+      "channel": "",
+      "filename_prefix": "ComfyUI",
+      "format": "PNG",
+      "quality": 85,
+      "thread_ts": ""
+    },
+    "_meta": { "title": "SLACK_OUTPUT" }
+  }
+}

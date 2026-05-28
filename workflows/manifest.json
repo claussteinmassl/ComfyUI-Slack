@@ -1,0 +1,20 @@
+{
+  "workflows": [
+    {
+      "name": "txt2img",
+      "label": "Generate image",
+      "description": "Generate an image from a text prompt",
+      "modality": "text",
+      "keywords": ["image", "picture", "photo"],
+      "template": "txt2img.api.json"
+    },
+    {
+      "name": "img2img",
+      "label": "Transform image",
+      "description": "Restyle an attached image using a text prompt",
+      "modality": "image",
+      "keywords": ["restyle", "transform", "img2img"],
+      "template": "img2img.api.json"
+    }
+  ]
+}

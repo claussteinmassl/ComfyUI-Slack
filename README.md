@@ -76,6 +76,132 @@ Alternatively, invite the bot to the channel first:
 /invite @ComfyUI
 ```
 
+## Trigger Workflows from Slack (Socket Mode)
+
+The package can also work the **other way around**: a user **@mentions the bot in Slack**
+with a prompt (and optionally an attached image or video), the bot picks the matching
+ComfyUI workflow, runs it, and posts the result back **in the same thread**.
+
+This runs as a background listener inside ComfyUI using Slack **Socket Mode** — an outbound
+WebSocket, so **no public URL or ngrok is needed**. It is **opt-in** and off by default; if
+you only use the send nodes you can ignore this section entirely.
+
+### How it works
+
+1. You save one or more workflows in **API format** and register them in a `manifest.json`.
+2. You @mention the bot: `@ComfyUI a cat astronaut` (optionally attach an image/video).
+3. The listener picks a workflow **deterministically** (no AI):
+   - by **input type** — no file → a `text` workflow, image → an `image` workflow, video → a `video` workflow;
+   - an explicit **`[name]` prefix** always wins, e.g. `@ComfyUI [img2img] make it watercolor`;
+   - if several workflows still match, the bot posts **buttons** to choose.
+4. The listener injects your prompt / file / channel / thread into the workflow and queues it.
+5. The workflow ends in a **Send to Slack** node, which posts the result back in your thread.
+
+### 1. Extra Slack App configuration
+
+In addition to the bot token setup above, do the following in your Slack App:
+
+- **Socket Mode** (left sidebar → *Socket Mode*): toggle **Enable Socket Mode** on.
+- **Interactivity** (*Interactivity & Shortcuts*): toggle on. With Socket Mode you do **not**
+  need a Request URL. (Required for the disambiguation buttons.)
+- **App-Level Token** (*Basic Information → App-Level Tokens*): create one with the
+  `connections:write` scope. It starts with `xapp-` — this is the `SLACK_APP_TOKEN`.
+- **Event Subscriptions** (*Event Subscriptions → Subscribe to bot events*): add `app_mention`.
+- **Additional Bot Token Scopes** (*OAuth & Permissions*), on top of the send scopes:
+
+  | Scope | Purpose |
+  |-------|---------|
+  | `app_mentions:read` | Receive @mentions |
+  | `files:read` | Download attached images/videos |
+  | `chat:write` | Post status, errors, and choice buttons |
+
+- **Reinstall the app** to your workspace to apply the new scopes, and **invite the bot** to
+  the channel (`/invite @ComfyUI`).
+
+### 2. Build a workflow registry
+
+1. In ComfyUI, enable **dev mode** (*Settings → Enable Dev Mode Options*) so the
+   **Save (API Format)** button appears.
+2. Build a workflow that **ends in a `Send Image to Slack` / `Send Video to Slack` node**,
+   then **rename** these nodes (right-click → *Title*) so the listener can find them:
+
+   | Rename this node to | Role |
+   |---------------------|------|
+   | `SLACK_PROMPT` | The text prompt node (e.g. the positive `CLIPTextEncode`) — receives the message text |
+   | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel + thread |
+   | `SLACK_INPUT_IMAGE` *(optional)* | A `LoadImage` node — receives an attached image |
+   | `SLACK_INPUT_VIDEO` *(optional)* | A video-load node (e.g. VideoHelperSuite `VHS_LoadVideo`) — receives an attached video |
+
+3. Click **Save (API Format)** and put the file in a folder alongside a `manifest.json`.
+   See the bundled [`workflows/`](workflows/) folder for working examples
+   (`manifest.json`, `txt2img.api.json`, `img2img.api.json`).
+
+`manifest.json` lists your workflows:
+
+```json
+{
+  "workflows": [
+    {
+      "name": "txt2img",
+      "label": "Generate image",
+      "description": "Generate an image from a text prompt",
+      "modality": "text",
+      "keywords": ["image", "picture", "photo"],
+      "template": "txt2img.api.json"
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `name` | Used by the `[name]` override and `help` listing |
+| `label` | Text shown on the Slack choice button |
+| `description` | Shown in the `@ComfyUI help` listing |
+| `modality` | `text`, `image`, `video`, or `any` — what input the workflow consumes |
+| `keywords` | Optional words that, if present in the message, auto-pick this workflow |
+| `template` | The API-format JSON file, relative to the manifest |
+
+> **Video input** needs a video-load node in your template (e.g. VideoHelperSuite). It is not
+> a dependency of this package — install the relevant node pack separately.
+
+### 3. Set the listener environment variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `SLACK_LISTENER_ENABLED` | yes (to turn it on) | off | Master switch — set to `1`/`true` |
+| `SLACK_APP_TOKEN` | yes | — | App-level token (`xapp-...`) |
+| `SLACK_BOT_TOKEN` | yes | — | Bot token (`xoxb-...`), reused from the send setup |
+| `SLACK_WORKFLOW_DIR` | yes | — | Folder containing `manifest.json` + templates |
+| `SLACK_ALLOWED_USERS` | one of these | empty | CSV of allowed user IDs (`U…`) |
+| `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channel IDs (`C…`) |
+| `SLACK_COMFY_URL` | no | auto | Override the local ComfyUI URL (e.g. `http://127.0.0.1:8188`) |
+| `SLACK_MAX_INPUT_MB` | no | `20` | Max size of an attachment to download |
+
+> **Authorization is default-deny.** Until you set `SLACK_ALLOWED_USERS` and/or
+> `SLACK_ALLOWED_CHANNELS`, every trigger is refused. Each trigger queues a GPU job on your
+> machine, so list only the users/channels you trust.
+
+**Windows (PowerShell, current session):**
+```powershell
+$env:SLACK_LISTENER_ENABLED = "1"
+$env:SLACK_APP_TOKEN = "xapp-your-token-here"
+$env:SLACK_WORKFLOW_DIR = "C:\path\to\your\workflows"
+$env:SLACK_ALLOWED_USERS = "U0123ABC,U0456DEF"
+```
+
+On startup you should see `[ComfyUI-Slack] Socket Mode listener started.` and a line listing
+the loaded workflows in the ComfyUI terminal.
+
+### 4. Use it
+
+| In Slack | Result |
+|----------|--------|
+| `@ComfyUI a neon city at night` | Runs the text workflow (or shows buttons if several match) |
+| `@ComfyUI [img2img] make it watercolor` + image | Forces the `img2img` workflow |
+| `@ComfyUI animate this` + image | Auto-picks the workflow whose `keywords` include `animate` |
+| `@ComfyUI help` | Lists the available workflows |
+
 ## Nodes
 
 ### SlackSendImage
@@ -138,3 +264,18 @@ Frames are padded to even dimensions automatically (required by most codecs). FF
 **`Slack upload failed: channel_not_found`** — double-check the channel ID in the node. Use the ID (e.g. `C0B6SUZMHC6`), not the channel name.
 
 **FFmpeg encoding failed** — check that the frame batch is not empty and that the selected codec is compatible with your FFmpeg build.
+
+**Listener doesn't start** — confirm `SLACK_LISTENER_ENABLED` is `1`/`true` and that
+`SLACK_APP_TOKEN`, `SLACK_BOT_TOKEN`, and `SLACK_WORKFLOW_DIR` are all set. The terminal logs
+the exact missing piece on startup.
+
+**Bot replies "You're not authorized"** — set `SLACK_ALLOWED_USERS` and/or
+`SLACK_ALLOWED_CHANNELS`. Authorization is default-deny, so an empty allowlist blocks everyone.
+
+**`template missing required node title marker(s)`** — rename the prompt node to `SLACK_PROMPT`
+and the final Slack send node to `SLACK_OUTPUT` in your workflow, then re-export it with
+**Save (API Format)**.
+
+**Mention does nothing** — make sure the bot is invited to the channel, `app_mention` is
+subscribed under Event Subscriptions, and Socket Mode is enabled. Re-install the app after
+changing scopes.

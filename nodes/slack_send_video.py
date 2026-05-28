@@ -76,10 +76,11 @@ class SlackSendVideo:
                 "audio": ("AUDIO",),
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
+                "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
             },
         }
 
-    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message=""):
+    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message="", thread_ts=""):
         codec = _CODEC_SETTINGS[format]
         ext = codec["ext"]
 
@@ -161,6 +162,7 @@ class SlackSendVideo:
                 filename=filename,
                 title=title,
                 message=message,
+                thread_ts=thread_ts or None,
             )
         finally:
             os.unlink(tmp_path)
