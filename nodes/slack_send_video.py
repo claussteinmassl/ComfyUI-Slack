@@ -13,6 +13,7 @@ _CODEC_SETTINGS = {
     "h264-mp4": {
         "ext": "mp4",
         "crf_max": 51,
+        "audio_codec": ["-c:a", "aac"],
         "args": lambda crf, fps: [
             "-c:v", "libx264", "-crf", str(crf),
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -21,6 +22,7 @@ _CODEC_SETTINGS = {
     "h265-mp4": {
         "ext": "mp4",
         "crf_max": 51,
+        "audio_codec": ["-c:a", "aac"],
         "args": lambda crf, fps: [
             "-c:v", "libx265", "-crf", str(crf), "-pix_fmt", "yuv420p",
         ],
@@ -28,6 +30,7 @@ _CODEC_SETTINGS = {
     "vp9-webm": {
         "ext": "webm",
         "crf_max": 63,
+        "audio_codec": ["-c:a", "libopus"],
         "args": lambda crf, fps: [
             "-c:v", "libvpx-vp9", "-crf", str(crf), "-b:v", "0", "-pix_fmt", "yuv420p",
         ],
@@ -35,6 +38,7 @@ _CODEC_SETTINGS = {
     "gif": {
         "ext": "gif",
         "crf_max": None,
+        "audio_codec": None,  # GIF has no audio support
         "args": lambda crf, fps: [
             "-vf", "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
             "-loop", "0",
@@ -69,12 +73,13 @@ class SlackSendVideo:
                 "quality": ("INT", {"default": 81, "min": 0, "max": 100, "step": 1}),
             },
             "optional": {
+                "audio": ("AUDIO",),
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
             },
         }
 
-    def send(self, images, channel, filename_prefix, frame_rate, format, quality, title="", message=""):
+    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message=""):
         codec = _CODEC_SETTINGS[format]
         ext = codec["ext"]
 
@@ -120,6 +125,33 @@ class SlackSendVideo:
                     f"FFmpeg encoding failed (exit {proc.returncode}):\n"
                     + stderr.decode("utf-8", errors="replace")
                 )
+
+            audio_codec = codec.get("audio_codec")
+            if audio is not None and audio_codec is not None:
+                waveform = audio["waveform"]  # [1, channels, samples]
+                sample_rate = audio["sample_rate"]
+                channels = waveform.size(1)
+                audio_bytes = waveform.squeeze(0).transpose(0, 1).numpy().tobytes()
+
+                with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as af:
+                    muxed_path = af.name
+
+                mux_cmd = [
+                    ffmpeg_exe, "-v", "error", "-y",
+                    "-i", tmp_path,
+                    "-ar", str(sample_rate), "-ac", str(channels),
+                    "-f", "f32le", "-i", "-",
+                    "-c:v", "copy",
+                ] + audio_codec + ["-shortest", muxed_path]
+
+                try:
+                    subprocess.run(mux_cmd, input=audio_bytes, check=True, capture_output=True)
+                except Exception:
+                    os.unlink(muxed_path)
+                    raise
+
+                os.unlink(tmp_path)
+                tmp_path = muxed_path
 
             filename = f"{filename_prefix}_00000.{ext}"
             upload_file_to_slack(
