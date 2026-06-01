@@ -4,6 +4,13 @@ Send generated images and videos directly to a Slack channel from within a Comfy
 
 ## Installation
 
+### ComfyUI Manager (recommended)
+
+In **ComfyUI Manager**, open **Custom Nodes Manager**, search for **ComfyUI-Slack**, and click
+**Install**. Restart ComfyUI when prompted. Dependencies are installed automatically.
+
+### Manual
+
 1. Clone this repository into your ComfyUI `custom_nodes` directory:
    ```
    cd ComfyUI/custom_nodes
@@ -305,3 +312,7 @@ and the final Slack send node to `SLACK_OUTPUT` in your workflow, then re-export
 **Mention does nothing** — make sure the bot is invited to the channel, `app_mention` is
 subscribed under Event Subscriptions, and Socket Mode is enabled. Re-install the app after
 changing scopes.
+
+## License
+
+MIT — see [LICENSE](LICENSE). © 2026 Claus Steinmassl.

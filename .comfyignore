@@ -1,0 +1,10 @@
+# Files kept in the GitHub repo but excluded from the published registry pack.
+# Syntax matches .gitignore; this layers on top of .gitignore.
+
+# Claude Code / agent files
+CLAUDE.md
+.claude/
+
+# Dev-only
+.github/
+*.tmp.*

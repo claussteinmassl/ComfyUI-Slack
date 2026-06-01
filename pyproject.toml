@@ -1,10 +1,20 @@
 [project]
 name = "comfyui-slack"
-version = "0.1.0"
-description = "ComfyUI custom nodes for sending images and videos to Slack"
+version = "1.0.0"
+description = "ComfyUI custom nodes for sending images and videos to Slack, plus an optional Slack-to-ComfyUI workflow trigger."
+authors = [{ name = "Claus Steinmassl" }]
+license = { file = "LICENSE" }
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "slack-sdk>=3.21.0",
     "imageio-ffmpeg>=0.4.7",
     "Pillow>=9.0.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/claussteinmassl/ComfyUI-Slack"
+
+[tool.comfy]
+PublisherId = "claussteinmassl"
+DisplayName = "ComfyUI-Slack"
