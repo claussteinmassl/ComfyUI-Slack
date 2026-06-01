@@ -177,6 +177,15 @@ In addition to the bot token setup above, do the following in your Slack App:
 | `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channel IDs (`C…`) |
 | `SLACK_COMFY_URL` | no | auto | Override the local ComfyUI URL (e.g. `http://127.0.0.1:8188`) |
 | `SLACK_MAX_INPUT_MB` | no | `20` | Max size of an attachment to download |
+| `SLACK_COMFY_API_KEY` | only for API-node workflows | — | comfy.org API key (`comfyui-...`); see below |
+
+> **comfy.org API nodes (OpenAI, etc.) need a key.** When you queue a workflow in the
+> browser, the ComfyUI frontend silently attaches your login token so partner/API nodes can
+> authenticate — having credits is not enough on its own. A workflow triggered by the listener
+> has no browser session, so any API node fails with
+> `Unauthorized: Please login first to use this node`. Generate an API key at
+> [platform.comfy.org](https://platform.comfy.org) and set it as `SLACK_COMFY_API_KEY`; the
+> listener forwards it with each queued prompt. Workflows using only local nodes don't need it.
 
 > **Authorization is default-deny.** Until you set `SLACK_ALLOWED_USERS` and/or
 > `SLACK_ALLOWED_CHANNELS`, every trigger is refused. Each trigger queues a GPU job on your
@@ -271,6 +280,12 @@ the exact missing piece on startup.
 
 **Bot replies "You're not authorized"** — set `SLACK_ALLOWED_USERS` and/or
 `SLACK_ALLOWED_CHANNELS`. Authorization is default-deny, so an empty allowlist blocks everyone.
+
+**`Unauthorized: Please login first to use this node`** — the workflow uses a comfy.org
+API/partner node (e.g. an OpenAI node). The browser login that authenticates these nodes in the
+GUI isn't present for a listener-triggered run, and credits alone don't authenticate the request.
+Generate an API key at [platform.comfy.org](https://platform.comfy.org) and set
+`SLACK_COMFY_API_KEY` before launching ComfyUI.
 
 **`template missing required node title marker(s)`** — rename the prompt node to `SLACK_PROMPT`
 and the final Slack send node to `SLACK_OUTPUT` in your workflow, then re-export it with

@@ -36,6 +36,20 @@ def workflow_dir() -> str | None:
     return os.environ.get("SLACK_WORKFLOW_DIR") or None
 
 
+def comfy_api_key() -> str | None:
+    """comfy.org API key for authenticating partner/API nodes in headless runs.
+
+    The ComfyUI frontend injects a login token into every prompt queued from the
+    browser, which is how comfy.org API nodes (e.g. the OpenAI nodes) authenticate.
+    A prompt POSTed by the listener has no such token, so any API node would fail
+    with "Unauthorized: Please login first to use this node." Setting this lets us
+    send the key as `extra_data.api_key_comfy_org` instead. Generate one at
+    platform.comfy.org. Returns None when unset (only needed by workflows that use
+    comfy.org API nodes).
+    """
+    return os.environ.get("SLACK_COMFY_API_KEY") or None
+
+
 def allowed_users() -> set[str]:
     """Slack user IDs (Uxxxx) permitted to trigger workflows."""
     return _csv(os.environ.get("SLACK_ALLOWED_USERS"))

@@ -71,7 +71,17 @@ def inject(workflow_graph: dict, req) -> dict:
 
 def submit_prompt(graph: dict) -> str:
     """POST a graph to ComfyUI's /prompt endpoint; return the prompt_id."""
-    body = json.dumps({"prompt": graph, "client_id": _CLIENT_ID}).encode("utf-8")
+    payload = {"prompt": graph, "client_id": _CLIENT_ID}
+
+    # comfy.org API nodes authenticate via a token the browser frontend normally
+    # injects into the prompt. A listener-queued prompt has none, so pass the key
+    # explicitly as extra_data.api_key_comfy_org (the field ComfyUI's executor
+    # forwards to those nodes' auth header). Skipped when no key is configured.
+    api_key = config.comfy_api_key()
+    if api_key:
+        payload["extra_data"] = {"api_key_comfy_org": api_key}
+
+    body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         config.comfy_base_url() + "/prompt",
         data=body,
