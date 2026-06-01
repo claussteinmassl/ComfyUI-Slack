@@ -129,7 +129,8 @@ In addition to the bot token setup above, do the following in your Slack App:
    |---------------------|------|
    | `SLACK_PROMPT` | The text prompt node (e.g. the positive `CLIPTextEncode`) — receives the message text |
    | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel, thread, and the triggering user to @-mention |
-   | `SLACK_INPUT_IMAGE` *(optional)* | A `LoadImage` node — receives an attached image |
+   | `SLACK_INPUT_IMAGE` *(optional)* | A `LoadImage` node — receives an attached image (slot 1) |
+   | `SLACK_INPUT_IMAGE_2`, `SLACK_INPUT_IMAGE_3`, … *(optional)* | Extra `LoadImage` nodes for workflows that take several distinct input images. Slot numbers must be contiguous (`SLACK_INPUT_IMAGE`, then `_2`, `_3`, …); the *n*-th attached image fills slot *n* |
    | `SLACK_INPUT_VIDEO` *(optional)* | A video-load node (e.g. VideoHelperSuite `VHS_LoadVideo`) — receives an attached video |
 
 3. Click **Save (API Format)** and put the file in a folder alongside a `manifest.json`.
@@ -165,6 +166,14 @@ In addition to the bot token setup above, do the following in your Slack App:
 > **Video input** needs a video-load node in your template (e.g. VideoHelperSuite). It is not
 > a dependency of this package — install the relevant node pack separately.
 
+> **Multiple input images.** A workflow accepts *N* images, where *N* is the number of
+> `SLACK_INPUT_IMAGE` slot markers in its template. When you attach *M* images:
+> *M = N* runs the workflow once (image *n* → slot *n*); *M* a larger multiple of *N*
+> (e.g. 3 images into a 1-slot workflow, or 4 into a 2-slot one) prompts you with
+> **Continue / Cancel** and, on Continue, runs the workflow `M / N` times in batches of
+> *N*; anything else (too few, or not a clean multiple) is rejected with an explanation.
+> Fan-out is capped by `SLACK_MAX_FANOUT` (default 25).
+
 ### 3. Set the listener environment variables
 
 | Variable | Required | Default | Purpose |
@@ -177,6 +186,7 @@ In addition to the bot token setup above, do the following in your Slack App:
 | `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channel IDs (`C…`) |
 | `SLACK_COMFY_URL` | no | auto | Override the local ComfyUI URL (e.g. `http://127.0.0.1:8188`) |
 | `SLACK_MAX_INPUT_MB` | no | `20` | Max size of an attachment to download |
+| `SLACK_MAX_FANOUT` | no | `25` | Max number of runs one message may fan out into (see below) |
 | `SLACK_NOTIFY_USER` | no | `true` | @-mention the triggering user in result & error replies; set to `false` to disable |
 | `SLACK_COMFY_API_KEY` | only for API-node workflows | — | comfy.org API key (`comfyui-...`); see below |
 

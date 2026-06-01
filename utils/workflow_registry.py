@@ -8,11 +8,15 @@ bad entries are logged and skipped rather than crashing the listener.
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 
 # Markers a template must contain to be usable.
 REQUIRED_MARKERS = ("SLACK_PROMPT", "SLACK_OUTPUT")
 VALID_MODALITIES = ("text", "image", "video", "any")
+
+# Image-input slot markers: bare == slot 1, _<n> == slot n.
+_IMAGE_SLOT_RE = re.compile(r"^SLACK_INPUT_IMAGE(?:_(\d+))?$")
 
 
 @dataclass
@@ -24,6 +28,7 @@ class Workflow:
     keywords: list[str]
     template_path: str
     graph: dict = field(repr=False)
+    image_inputs: int = 0
 
 
 def _node_titles(graph: dict) -> set[str]:
@@ -34,6 +39,28 @@ def _node_titles(graph: dict) -> set[str]:
             if title:
                 titles.add(title)
     return titles
+
+
+def _image_input_count(titles: set[str]) -> int:
+    """Number of SLACK_INPUT_IMAGE / SLACK_INPUT_IMAGE_<n> markers.
+
+    Slot indices: bare marker == 1, _<n> == n. Raises ValueError if the present
+    slots are not the contiguous set 1..N (e.g. _2 without a base marker).
+    """
+    slots = set()
+    for t in titles:
+        m = _IMAGE_SLOT_RE.match(t)
+        if m:
+            slots.add(int(m.group(1)) if m.group(1) else 1)
+    if not slots:
+        return 0
+    expected = set(range(1, max(slots) + 1))
+    if slots != expected:
+        raise ValueError(
+            f"image input markers must be contiguous 1..N; got slots "
+            f"{sorted(slots)} (expected {sorted(expected)})"
+        )
+    return len(slots)
 
 
 def load(dir_path: str) -> dict[str, Workflow]:
@@ -82,6 +109,12 @@ def load(dir_path: str) -> dict[str, Workflow]:
                       f"node title marker(s) {missing}; skipped.")
                 continue
 
+            try:
+                image_inputs = _image_input_count(titles)
+            except ValueError as e:
+                print(f"[ComfyUI-Slack] Workflow '{name}': {e}; skipped.")
+                continue
+
             registry[name] = Workflow(
                 name=name,
                 label=entry.get("label", name),
@@ -90,6 +123,7 @@ def load(dir_path: str) -> dict[str, Workflow]:
                 keywords=[k.lower() for k in entry.get("keywords", [])],
                 template_path=template_path,
                 graph=graph,
+                image_inputs=image_inputs,
             )
         except KeyError as e:
             print(f"[ComfyUI-Slack] Skipping workflow entry missing field {e}.")

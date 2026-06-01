@@ -7,7 +7,7 @@ to run, or that the user must disambiguate, or that the request is rejected.
 import re
 from dataclasses import dataclass
 
-from . import workflow_registry
+from . import config, workflow_registry
 from .workflow_registry import Workflow
 
 _OVERRIDE_RE = re.compile(r"^\s*\[([A-Za-z0-9_-]+)\]\s*")
@@ -29,6 +29,23 @@ class Rejected:
 
 
 RouteResult = Resolved | NeedsChoice | Rejected
+
+
+@dataclass
+class RunOnce:
+    workflow: Workflow
+    images: list[str]          # the N images for the single run ([] for text/video)
+
+
+@dataclass
+class ConfirmFanOut:
+    workflow: Workflow
+    batches: list[list[str]]   # k batches of N images each
+    n: int
+    m: int
+
+
+PlanResult = RunOnce | ConfirmFanOut | Rejected
 
 
 def modality_of(input_kind: str | None) -> str:
@@ -106,3 +123,48 @@ def select(req, registry) -> RouteResult:
 
     # 4. Still ambiguous -> ask via buttons.
     return NeedsChoice(candidates)
+
+
+def plan_run(workflow, req) -> PlanResult:
+    """Decide how to execute *workflow* given the images on *req*.
+
+    Compares M (images sent) to N (``workflow.image_inputs``):
+      M == N        -> RunOnce
+      M <  N        -> Rejected (needs more)
+      M == k*N, k>1 -> ConfirmFanOut (ask Continue/Cancel), unless k exceeds cap
+      otherwise     -> Rejected (not a multiple)
+    Video/text requests (input_kind != "image") always RunOnce.
+    """
+    if req.input_kind != "image":
+        return RunOnce(workflow, [])
+
+    n = workflow.image_inputs
+    images = list(req.input_paths)
+    m = len(images)
+
+    if n == 0:
+        return Rejected(
+            f"*{workflow.label}* doesn't take image inputs, but you attached "
+            f"{m} image(s). Remove the attachment(s) or pick an image workflow."
+        )
+    if m == n:
+        return RunOnce(workflow, images)
+    if m < n:
+        return Rejected(
+            f"*{workflow.label}* needs {n} image(s); you sent {m}. "
+            f"Attach {n - m} more and try again."
+        )
+    if m % n == 0:                       # k > 1
+        k = m // n
+        cap = config.max_fanout()
+        if k > cap:
+            return Rejected(
+                f"That would run *{workflow.label}* {k} times, over the "
+                f"{cap}-run limit (SLACK_MAX_FANOUT). Send fewer images."
+            )
+        batches = [images[i:i + n] for i in range(0, m, n)]
+        return ConfirmFanOut(workflow, batches, n=n, m=m)
+    return Rejected(
+        f"*{workflow.label}* takes {n} image(s) per run. You sent {m}, which "
+        f"isn't a multiple of {n}. Send {n}, or a multiple of {n}, image(s)."
+    )

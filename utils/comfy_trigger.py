@@ -7,6 +7,7 @@ queue the prompt, not wait for completion.
 
 import copy
 import json
+import re
 import urllib.error
 import urllib.request
 from uuid import uuid4
@@ -14,6 +15,9 @@ from uuid import uuid4
 from . import config
 
 _CLIENT_ID = uuid4().hex
+
+# Image-input slot markers: bare == slot 1, _<n> == slot n.
+_IMAGE_SLOT_RE = re.compile(r"^SLACK_INPUT_IMAGE(?:_(\d+))?$")
 
 # Per class_type, the input field that holds the prompt text.
 _PROMPT_FIELDS = {
@@ -42,11 +46,13 @@ def _set_prompt(node: dict, prompt: str) -> None:
     inputs[field] = prompt
 
 
-def inject(workflow_graph: dict, req) -> dict:
+def inject(workflow_graph: dict, req, images: list[str]) -> dict:
     """Return a deep copy of *workflow_graph* with Slack values injected.
 
-    Targets are located by ``_meta.title`` markers: SLACK_PROMPT,
-    SLACK_INPUT_IMAGE, SLACK_INPUT_VIDEO, SLACK_OUTPUT.
+    *images* is the ordered list of image paths for THIS run (its length should
+    equal the template's SLACK_INPUT_IMAGE slot count). Targets are located by
+    ``_meta.title`` markers: SLACK_PROMPT, SLACK_INPUT_IMAGE[_n],
+    SLACK_INPUT_VIDEO, SLACK_OUTPUT.
     """
     graph = copy.deepcopy(workflow_graph)
 
@@ -57,8 +63,6 @@ def inject(workflow_graph: dict, req) -> dict:
 
         if title == "SLACK_PROMPT":
             _set_prompt(node, req.prompt)
-        elif title == "SLACK_INPUT_IMAGE" and req.input_kind == "image":
-            node.setdefault("inputs", {})["image"] = req.input_path
         elif title == "SLACK_INPUT_VIDEO" and req.input_kind == "video":
             node.setdefault("inputs", {})["video"] = req.input_path
         elif title == "SLACK_OUTPUT":
@@ -67,6 +71,12 @@ def inject(workflow_graph: dict, req) -> dict:
             inputs["thread_ts"] = req.thread_ts
             if config.notify_user():
                 inputs["user_id"] = req.user
+        else:
+            m = _IMAGE_SLOT_RE.match(title)
+            if m and req.input_kind == "image":
+                idx = (int(m.group(1)) if m.group(1) else 1) - 1
+                if 0 <= idx < len(images):
+                    node.setdefault("inputs", {})["image"] = images[idx]
 
     return graph
 
@@ -112,6 +122,10 @@ def submit_prompt(graph: dict) -> str:
     return prompt_id
 
 
-def run(workflow, req) -> str:
-    """Inject *req* into *workflow* and queue it. Returns the prompt_id."""
-    return submit_prompt(inject(workflow.graph, req))
+def run(workflow, req, images: list[str]) -> str:
+    """Inject *req* + this run's *images* into *workflow* and queue it.
+
+    Returns the prompt_id. *images* is the per-run image list (empty for
+    text/video workflows).
+    """
+    return submit_prompt(inject(workflow.graph, req, images))

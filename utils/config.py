@@ -74,6 +74,15 @@ def max_input_mb() -> int:
         return 20
 
 
+def max_fanout() -> int:
+    """Maximum number of runs a single request may fan out into."""
+    raw = os.environ.get("SLACK_MAX_FANOUT", "")
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 25
+
+
 def comfy_base_url() -> str:
     """Resolve the local ComfyUI HTTP base URL for the /prompt endpoint.
 

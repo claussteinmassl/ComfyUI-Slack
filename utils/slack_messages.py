@@ -4,7 +4,7 @@ import json
 import os
 import re
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from slack_sdk.errors import SlackApiError
 
@@ -22,8 +22,13 @@ class TriggerRequest:
     thread_ts: str
     user: str
     override: str | None = None
-    input_path: str | None = None   # filename inside the ComfyUI input dir
+    input_paths: list[str] = field(default_factory=list)  # filenames in input dir
     input_kind: str | None = None   # "image" | "video" | None
+
+    @property
+    def input_path(self) -> str | None:
+        """First input path -- back-compat shim for single-input/video sites."""
+        return self.input_paths[0] if self.input_paths else None
 
 
 def parse_app_mention(event: dict, bot_user_id: str | None) -> TriggerRequest:
@@ -106,6 +111,27 @@ def download_slack_file(file_obj: dict, dest_dir: str) -> tuple[str, str]:
     return filename, kind
 
 
+def download_slack_files(files: list[dict], dest_dir: str) -> tuple[list[str], str]:
+    """Download every attachment in *files* into *dest_dir*.
+
+    Returns (paths, kind). All-images -> (N paths, "image"); exactly one video
+    and nothing else -> (1 path, "video"). Raises RuntimeError on a mixed set,
+    on multiple videos, or (via download_slack_file) on an unsupported type.
+    """
+    images, videos = [], []
+    for f in files:
+        name, kind = download_slack_file(f, dest_dir)
+        (images if kind == "image" else videos).append(name)
+
+    if videos and images:
+        raise RuntimeError("Attach images *or* a single video, not both.")
+    if len(videos) > 1:
+        raise RuntimeError("Only one video can be processed per request.")
+    if videos:
+        return videos, "video"
+    return images, "image"
+
+
 def mention_prefix(user_id: str) -> str:
     """Return '<@user> ' when user notifications are enabled, else ''."""
     if user_id and config.notify_user():
@@ -148,4 +174,31 @@ def post_choice_buttons(client, channel: str, thread_ts: str | None,
         thread_ts=thread_ts or None,
         text=text,
         blocks=_choice_blocks(text, pid, candidates),
+    )
+
+
+def _confirm_blocks(text: str, pid: str) -> list[dict]:
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": text}},
+        {"type": "actions", "elements": [
+            {"type": "button", "style": "primary",
+             "text": {"type": "plain_text", "text": "Continue"},
+             "value": json.dumps({"pid": pid, "kind": "confirm"}),
+             "action_id": "slack_comfy_confirm"},
+            {"type": "button",
+             "text": {"type": "plain_text", "text": "Cancel"},
+             "value": json.dumps({"pid": pid, "kind": "cancel"}),
+             "action_id": "slack_comfy_cancel"},
+        ]},
+    ]
+
+
+def post_confirm_buttons(client, channel: str, thread_ts: str | None,
+                         pid: str, text: str) -> None:
+    """Post a Continue/Cancel confirmation prompt."""
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=thread_ts or None,
+        text=text,
+        blocks=_confirm_blocks(text, pid),
     )
