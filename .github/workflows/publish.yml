@@ -14,6 +14,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install comfy-cli
-      - run: comfy node publish
+      - run: comfy node publish --token "$COMFY_API_KEY"
         env:
           COMFY_API_KEY: ${{ secrets.COMFY_API_KEY }}
