@@ -21,6 +21,11 @@ def listener_enabled() -> bool:
     return os.environ.get("SLACK_LISTENER_ENABLED", "").strip().lower() in _TRUE
 
 
+def notify_user() -> bool:
+    """Whether to @-mention the triggering user in result/error replies."""
+    return os.environ.get("SLACK_NOTIFY_USER", "true").strip().lower() in _TRUE
+
+
 def app_token() -> str | None:
     """Slack app-level token (xapp-...) with the connections:write scope."""
     return os.environ.get("SLACK_APP_TOKEN") or None

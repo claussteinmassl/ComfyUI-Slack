@@ -128,7 +128,7 @@ In addition to the bot token setup above, do the following in your Slack App:
    | Rename this node to | Role |
    |---------------------|------|
    | `SLACK_PROMPT` | The text prompt node (e.g. the positive `CLIPTextEncode`) — receives the message text |
-   | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel + thread |
+   | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel, thread, and the triggering user to @-mention |
    | `SLACK_INPUT_IMAGE` *(optional)* | A `LoadImage` node — receives an attached image |
    | `SLACK_INPUT_VIDEO` *(optional)* | A video-load node (e.g. VideoHelperSuite `VHS_LoadVideo`) — receives an attached video |
 
@@ -177,6 +177,7 @@ In addition to the bot token setup above, do the following in your Slack App:
 | `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channel IDs (`C…`) |
 | `SLACK_COMFY_URL` | no | auto | Override the local ComfyUI URL (e.g. `http://127.0.0.1:8188`) |
 | `SLACK_MAX_INPUT_MB` | no | `20` | Max size of an attachment to download |
+| `SLACK_NOTIFY_USER` | no | `true` | @-mention the triggering user in result & error replies; set to `false` to disable |
 | `SLACK_COMFY_API_KEY` | only for API-node workflows | — | comfy.org API key (`comfyui-...`); see below |
 
 > **comfy.org API nodes (OpenAI, etc.) need a key.** When you queue a workflow in the

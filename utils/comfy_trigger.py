@@ -65,6 +65,8 @@ def inject(workflow_graph: dict, req) -> dict:
             inputs = node.setdefault("inputs", {})
             inputs["channel"] = req.channel
             inputs["thread_ts"] = req.thread_ts
+            if config.notify_user():
+                inputs["user_id"] = req.user
 
     return graph
 

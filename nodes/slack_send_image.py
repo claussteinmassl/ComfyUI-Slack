@@ -33,12 +33,14 @@ class SlackSendImage:
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
                 "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
+                "user_id": ("STRING", {"default": "", "tooltip": "Slack user ID to @-mention in the result message. Auto-filled by the Slack listener."}),
             },
         }
 
-    def send(self, images, channel, filename_prefix, format, quality, title="", message="", thread_ts=""):
+    def send(self, images, channel, filename_prefix, format, quality, title="", message="", thread_ts="", user_id=""):
         client = get_client()
         ext = _FORMAT_EXT[format]
+        comment = f"<@{user_id}> {message}".strip() if user_id else message
 
         for i, img_tensor in enumerate(images):
             arr = np.clip(255.0 * img_tensor.cpu().numpy(), 0, 255).astype(np.uint8)
@@ -65,7 +67,7 @@ class SlackSendImage:
                     file_path=tmp_path,
                     filename=filename,
                     title=title,
-                    message=message if i == 0 else "",
+                    message=comment if i == 0 else "",
                     thread_ts=thread_ts or None,
                 )
             finally:
