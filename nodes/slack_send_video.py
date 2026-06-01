@@ -77,12 +77,14 @@ class SlackSendVideo:
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
                 "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
+                "user_id": ("STRING", {"default": "", "tooltip": "Slack user ID to @-mention in the result message. Auto-filled by the Slack listener."}),
             },
         }
 
-    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message="", thread_ts=""):
+    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message="", thread_ts="", user_id=""):
         codec = _CODEC_SETTINGS[format]
         ext = codec["ext"]
+        comment = f"<@{user_id}> {message}".strip() if user_id else message
 
         first = _pad_to_even(images[0].cpu().numpy())
         h, w = first.shape[:2]
@@ -161,7 +163,7 @@ class SlackSendVideo:
                 file_path=tmp_path,
                 filename=filename,
                 title=title,
-                message=message,
+                message=comment,
                 thread_ts=thread_ts or None,
             )
         finally:

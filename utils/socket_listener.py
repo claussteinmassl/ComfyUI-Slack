@@ -125,8 +125,9 @@ def _handle_mention(event: dict) -> None:
             _run_workflow(route.template, req)
     except Exception as e:  # noqa: BLE001 - never let the worker die silently
         traceback.print_exc()
+        prefix = slack_messages.mention_prefix(event.get("user", ""))
         slack_messages.post_text(
-            _web_client, channel, f":warning: Failed: {e}", thread_ts
+            _web_client, channel, f"{prefix}:warning: Failed: {e}", thread_ts
         )
 
 
@@ -171,8 +172,9 @@ def _handle_button(payload: dict) -> None:
         _run_workflow(workflow, req)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
+        prefix = slack_messages.mention_prefix(payload.get("user", {}).get("id", ""))
         slack_messages.post_text(
-            _web_client, channel, f":warning: Failed: {e}", thread_ts
+            _web_client, channel, f"{prefix}:warning: Failed: {e}", thread_ts
         )
 
 

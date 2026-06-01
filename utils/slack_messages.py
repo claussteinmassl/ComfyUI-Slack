@@ -106,6 +106,13 @@ def download_slack_file(file_obj: dict, dest_dir: str) -> tuple[str, str]:
     return filename, kind
 
 
+def mention_prefix(user_id: str) -> str:
+    """Return '<@user> ' when user notifications are enabled, else ''."""
+    if user_id and config.notify_user():
+        return f"<@{user_id}> "
+    return ""
+
+
 def post_text(client, channel: str, text: str, thread_ts: str | None) -> None:
     """Post a threaded status/error reply. Best-effort; swallows API errors."""
     try:
