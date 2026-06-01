@@ -6,14 +6,11 @@ and dispatches; all real work happens on a small worker pool so the 3-second
 Slack ACK window is never missed.
 """
 
-import json
 import time
 import traceback
-from collections import OrderedDict, deque
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from threading import Event, Lock
-from uuid import uuid4
+from threading import Event
 
 from slack_sdk import WebClient
 from slack_sdk.socket_mode import SocketModeClient
@@ -31,38 +28,9 @@ except Exception:  # pragma: no cover - only available inside ComfyUI
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="slack-comfy")
 _recent_event_ids: deque = deque(maxlen=256)
 
-_PENDING_MAX = 64
-_pending: "OrderedDict[str, object]" = OrderedDict()
-_pending_lock = Lock()
-
-
-@dataclass
-class _PendingConfirm:
-    """A fan-out awaiting the user's Continue/Cancel click."""
-    req: "slack_messages.TriggerRequest"
-    workflow_name: str
-    batches: list
-
 _web_client: WebClient | None = None
 _bot_user_id: str | None = None
 _registry: dict = {}
-
-
-# --------------------------------------------------------------------------- #
-# Pending (button) store
-# --------------------------------------------------------------------------- #
-def _stash_pending(req) -> str:
-    pid = uuid4().hex[:12]
-    with _pending_lock:
-        _pending[pid] = req
-        while len(_pending) > _PENDING_MAX:
-            _pending.popitem(last=False)
-    return pid
-
-
-def _pop_pending(pid: str):
-    with _pending_lock:
-        return _pending.pop(pid, None)
 
 
 # --------------------------------------------------------------------------- #
@@ -128,14 +96,16 @@ def _dispatch_plan(workflow, req, channel: str, message_ts: str | None,
         )
     elif isinstance(plan, router.ConfirmFanOut):
         # Clear any stale choice buttons; ask the confirm question in a fresh message.
+        # The request travels inside the button value (stateless); the batches are
+        # re-derived from it on click, so nothing is stashed server-side.
         _replace_buttons(channel, message_ts,
                          f"One more question about *{workflow.label}*…")
-        pid = _stash_pending(_PendingConfirm(req, workflow.name, plan.batches))
         slack_messages.post_confirm_buttons(
-            _web_client, channel, thread_ts, pid,
+            _web_client, channel, thread_ts, req,
             f"*{workflow.label}* takes {plan.n} image(s) per run, and you sent "
             f"{plan.m}. I can run it {plan.m // plan.n} times "
             f"({plan.n} image(s) each). Continue?",
+            workflow.name,
         )
 
 
@@ -164,16 +134,15 @@ def _handle_mention(event: dict) -> None:
 
         files = event.get("files") or []
         if files:
-            paths, kind = slack_messages.download_slack_files(files, _input_dir())
-            req.input_paths, req.input_kind = paths, kind
+            paths, kind, ids = slack_messages.download_slack_files(files, _input_dir())
+            req.input_paths, req.input_kind, req.file_ids = paths, kind, ids
 
         route = router.select(req, _registry)
         if isinstance(route, Rejected):
             slack_messages.post_text(_web_client, req.channel, route.reason, req.thread_ts)
         elif isinstance(route, NeedsChoice):
-            pid = _stash_pending(req)
             slack_messages.post_choice_buttons(
-                _web_client, req.channel, req.thread_ts, pid, route.candidates
+                _web_client, req.channel, req.thread_ts, req, route.candidates
             )
         elif isinstance(route, Resolved):
             _dispatch_plan(route.template, req, req.channel, None, req.thread_ts)
@@ -195,25 +164,38 @@ def _handle_button(payload: dict) -> None:
     thread_ts = payload.get("message", {}).get("thread_ts") or message_ts
 
     try:
-        value = json.loads(actions[0].get("value", "{}"))
-        pid = value.get("pid")
-
-        pending = _pop_pending(pid) if pid else None
-        if pending is None:
+        # The request is reconstructed entirely from the button value (stateless),
+        # so any connected machine can handle this click.
+        req, action = slack_messages.decode_button_value(actions[0].get("value", "{}"))
+        if req is None:
             slack_messages.post_text(
                 _web_client, channel,
                 "That choice expired — please @mention me again.", thread_ts,
             )
             return
 
-        # Continue/Cancel on a fan-out confirmation.
-        if value.get("kind") in ("confirm", "cancel"):
-            _handle_confirm(pending, value["kind"], channel, message_ts, thread_ts)
+        # Cancel needs no inputs — handle it before touching Slack/files.
+        if action.get("kind") == "cancel":
+            _handle_confirm(req, action.get("n"), "cancel",
+                            channel, message_ts, thread_ts)
             return
 
-        # Otherwise this is a workflow-choice click; pending is a TriggerRequest.
-        req = pending
-        name = value.get("name")
+        # Re-materialize input files on THIS machine (the click may have landed on
+        # a machine that never downloaded them). download_files_by_id is idempotent.
+        if req.file_ids:
+            paths, kind, ids = slack_messages.download_files_by_id(
+                _web_client, req.file_ids, _input_dir()
+            )
+            req.input_paths, req.input_kind, req.file_ids = paths, kind, ids
+
+        # Continue on a fan-out confirmation.
+        if action.get("kind") == "confirm":
+            _handle_confirm(req, action.get("n"), "confirm",
+                            channel, message_ts, thread_ts)
+            return
+
+        # Otherwise this is a workflow-choice click.
+        name = action.get("name")
         workflow = workflow_registry.get(_registry, name)
         if workflow is None:
             slack_messages.post_text(
@@ -234,11 +216,15 @@ def _handle_button(payload: dict) -> None:
         )
 
 
-def _handle_confirm(pending, kind: str, channel: str, message_ts: str | None,
-                    thread_ts: str | None) -> None:
-    """Act on a Continue/Cancel click for a stashed fan-out."""
-    workflow = workflow_registry.get(_registry, pending.workflow_name)
-    label = workflow.label if workflow else pending.workflow_name
+def _handle_confirm(req, workflow_name: str | None, kind: str, channel: str,
+                    message_ts: str | None, thread_ts: str | None) -> None:
+    """Act on a Continue/Cancel click for a fan-out confirmation.
+
+    *req* is the reconstructed request; batches are re-derived deterministically
+    via router.plan_run (they were never stored server-side).
+    """
+    workflow = workflow_registry.get(_registry, workflow_name) if workflow_name else None
+    label = workflow.label if workflow else (workflow_name or "workflow")
 
     if kind == "cancel":
         _replace_buttons(channel, message_ts, f"Cancelled *{label}*.")
@@ -246,11 +232,25 @@ def _handle_confirm(pending, kind: str, channel: str, message_ts: str | None,
 
     if workflow is None:
         _replace_buttons(channel, message_ts,
-                         f"Workflow '{pending.workflow_name}' is no longer available.")
+                         f"Workflow '{workflow_name}' is no longer available.")
         return
 
-    _replace_buttons(channel, message_ts, f"Running *{label}*…")
-    _fan_out(workflow, pending.req, pending.batches, channel, thread_ts)
+    plan = router.plan_run(workflow, req)
+    if isinstance(plan, router.ConfirmFanOut):
+        _replace_buttons(channel, message_ts, f"Running *{label}*…")
+        _fan_out(workflow, req, plan.batches, channel, thread_ts)
+    elif isinstance(plan, router.RunOnce):
+        _replace_buttons(channel, message_ts, f"Running *{label}*…")
+        prompt_id = comfy_trigger.run(workflow, req, plan.images)
+        slack_messages.post_text(
+            _web_client, channel,
+            f"Queued :white_check_mark: *{label}* (id `{prompt_id}`) — "
+            "the result will post here shortly.",
+            thread_ts,
+        )
+    else:  # Rejected — images no longer line up (shouldn't normally happen)
+        _replace_buttons(channel, message_ts, f"Can't run *{label}* as sent.")
+        slack_messages.post_text(_web_client, channel, plan.reason, thread_ts)
 
 
 def _post_help(req) -> None:

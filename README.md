@@ -209,6 +209,17 @@ In addition to the bot token setup above, do the following in your Slack App:
 > `SLACK_ALLOWED_CHANNELS`, every trigger is refused. Each trigger queues a GPU job on your
 > machine, so list only the users/channels you trust.
 
+> **Running the listener on several machines.** You can point multiple machines at the *same*
+> Slack app to share the load. Slack delivers each event to exactly one connection (at random,
+> up to 10 connections per app), so a request runs on whichever machine happens to receive it —
+> there are no duplicate runs. Buttons (workflow choice and fan-out confirmation) are stateless:
+> a click can be handled by any machine, which re-downloads the needed input files on demand.
+> For this to behave consistently, give every machine an **identical** `SLACK_WORKFLOW_DIR`
+> (same `manifest.json`, templates, and models) and the same allow-lists; otherwise the same
+> request can succeed or fail depending on which machine catches it. If you'd rather route all
+> Slack traffic to one box, simply leave `SLACK_LISTENER_ENABLED` unset on the others — they can
+> still use the send nodes.
+
 **Windows (PowerShell, current session):**
 ```powershell
 $env:SLACK_LISTENER_ENABLED = "1"
