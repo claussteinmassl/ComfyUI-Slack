@@ -1,0 +1,26 @@
+name: Tests
+
+# Runs on pushes/PRs to main, and is reused by publish.yml as a required gate
+# (a new version can only be published when this job passes).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # The suite only needs pytest + slack-sdk; the node modules (numpy/torch/
+      # ffmpeg) are intentionally out of scope and never imported by the tests.
+      - run: pip install pytest slack-sdk
+      - run: python -m pytest tests/ -v

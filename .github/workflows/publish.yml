@@ -6,7 +6,11 @@ on:
       - 'v*'
 
 jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+
   publish:
+    needs: test          # publish only runs if the test job succeeds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
