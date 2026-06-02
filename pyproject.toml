@@ -5,7 +5,7 @@ description = "ComfyUI custom nodes for sending images, videos, text, and audio 
 authors = [{ name = "Claus Steinmassl" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "slack-sdk>=3.21.0",
     "imageio-ffmpeg>=0.4.7",
