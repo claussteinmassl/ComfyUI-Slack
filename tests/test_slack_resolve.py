@@ -21,6 +21,7 @@ resolve_allowed_channels = slack_resolve.resolve_allowed_channels
 resolve_allowed_users = slack_resolve.resolve_allowed_users
 resolve_channel = slack_resolve.resolve_channel
 resolve_user = slack_resolve.resolve_user
+resolve_destination = slack_resolve.resolve_destination
 
 
 class FakeClient:
@@ -30,7 +31,7 @@ class FakeClient:
         self.channels_pages = channels_pages or []
         self.users_pages = users_pages or []
         self.raise_on = raise_on or set()
-        self.calls = {"conversations_list": 0, "users_list": 0}
+        self.calls = {"conversations_list": 0, "users_list": 0, "conversations_open": 0}
 
     def _page(self, pages, cursor):
         idx = 0 if cursor in (None, "") else int(cursor)
@@ -47,6 +48,18 @@ class FakeClient:
             raise SlackApiError("missing_scope", {"error": "missing_scope"})
         self.calls["users_list"] += 1
         return self._page(self.users_pages, cursor)
+
+    def conversations_open(self, users=None, **kwargs):
+        if "conversations_open" in self.raise_on:
+            raise SlackApiError("missing_scope", {"error": "missing_scope"})
+        self.calls["conversations_open"] += 1
+        # Slack returns a stable D… id per user; fake one shaped like a real id.
+        return {"channel": {"id": _dm(users)}}
+
+
+def _dm(uid):
+    """Deterministic DM channel id for a user id, shaped like a real Slack D… id."""
+    return "D" + uid + "00000"
 
 
 # Two channel pages so pagination is exercised; "random" is archived.
@@ -87,6 +100,7 @@ def _reset_caches():
     slack_resolve._channel_built_at = 0.0
     slack_resolve._user_cache = None
     slack_resolve._user_built_at = 0.0
+    slack_resolve._dm_cache = {}
     yield
 
 
@@ -227,3 +241,64 @@ def test_miss_triggers_throttled_rebuild(monkeypatch):
     with pytest.raises(ValueError):
         resolve_channel(client, "nope")
     assert client.calls["conversations_list"] > builds_after_first
+
+
+# --------------------------------------------------------------------------- #
+# resolve_destination — channel vs user (DM)
+# --------------------------------------------------------------------------- #
+def test_destination_explicit_channel_no_dm():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    assert resolve_destination(client, "#general") == "C001"
+    assert resolve_destination(client, "C0123ABCD") == "C0123ABCD"
+    assert client.calls["conversations_open"] == 0  # never opened a DM
+
+
+def test_destination_explicit_user_opens_dm():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    assert resolve_destination(client, "@alice") == _dm("U001")   # name → uid → DM
+    assert resolve_destination(client, "U777XXX77") == _dm("U777XXX77")  # raw id → DM
+    assert client.calls["conversations_open"] == 2
+
+
+def test_destination_bare_name_prefers_channel():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    # "design" is a channel and not a user → resolves as the channel, no DM.
+    assert resolve_destination(client, "design") == "C003"
+    assert client.calls["conversations_open"] == 0
+
+
+def test_destination_bare_name_falls_back_to_user_dm():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    # "alice" is not a channel → falls back to the user DM.
+    assert resolve_destination(client, "alice") == _dm("U001")
+
+
+def test_destination_bare_ambiguous_user_propagates():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    with pytest.raises(AmbiguousNameError):
+        resolve_destination(client, "Bobby")  # not a channel; matches 2 users
+
+
+def test_destination_not_found_raises():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    with pytest.raises(ValueError):
+        resolve_destination(client, "ghost")  # archived/none + deactivated user
+
+
+def test_destination_empty_raises():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    with pytest.raises(ValueError):
+        resolve_destination(client, "   ")
+
+
+def test_dm_cache_avoids_second_open():
+    client = FakeClient(channels_pages=CHANNELS, users_pages=USERS)
+    resolve_destination(client, "@alice")
+    resolve_destination(client, "@alice")
+    assert client.calls["conversations_open"] == 1  # second call served from cache
+
+
+def test_dm_missing_scope_raises_clear_error():
+    client = FakeClient(users_pages=USERS, raise_on={"conversations_open"})
+    with pytest.raises(ValueError, match="im:write"):
+        resolve_destination(client, "U777XXX77")

@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -6,6 +7,7 @@ import numpy as np
 import imageio_ffmpeg
 
 from ..utils.slack_client import get_client, upload_file_to_slack
+from ..utils.local_save import resolve_save_path, SAVE_LOCATIONS
 
 # codec: (extension, crf_max or None, extra_args_fn)
 # quality INT 0-100: 100 = best (CRF 0), 0 = worst (CRF max)
@@ -66,8 +68,11 @@ class SlackSendVideo:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "channel": ("STRING", {"default": "", "tooltip": "Slack channel name or ID (e.g. #general or C1234567890). Names are resolved automatically; the bot must be a member of private channels."}),
+                "channel": ("STRING", {"default": "", "tooltip": "Channel or user: #general, @alice, or a raw ID. A user (@name or U…) is sent as a direct message. Names resolve automatically; the bot must be a member of private channels."}),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+                "save_output": ("BOOLEAN", {"default": False, "label_on": "save", "label_off": "don't save", "tooltip": "Also write the video to disk in addition to sending it to Slack."}),
+                "save_location": (SAVE_LOCATIONS, {"tooltip": "Where the saved copy is written. 'ComfyUI output folder' uses ComfyUI's output directory with an auto-incrementing counter; 'Absolute path' writes into the folder set below."}),
+                "output_folder": ("STRING", {"default": "", "placeholder": "D:/exports", "tooltip": "Base folder for the saved copy. Used only when save_location is 'Absolute path'; combined with filename_prefix."}),
                 "frame_rate": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 120.0, "step": 0.1}),
                 "format": (["h264-mp4", "h265-mp4", "vp9-webm", "gif"],),
                 "quality": ("INT", {"default": 81, "min": 0, "max": 100, "step": 1}),
@@ -81,7 +86,7 @@ class SlackSendVideo:
             },
         }
 
-    def send(self, images, channel, filename_prefix, frame_rate, format, quality, audio=None, title="", message="", thread_ts="", user_id=""):
+    def send(self, images, channel, filename_prefix, save_output, save_location, output_folder, frame_rate, format, quality, audio=None, title="", message="", thread_ts="", user_id=""):
         codec = _CODEC_SETTINGS[format]
         ext = codec["ext"]
         comment = f"<@{user_id}> {message}".strip() if user_id else message
@@ -155,6 +160,16 @@ class SlackSendVideo:
 
                 os.unlink(tmp_path)
                 tmp_path = muxed_path
+
+            # Copy to the local destination before uploading, so the saved
+            # artifact persists even if the Slack upload fails. The file is
+            # already encoded, so this is a copy — not a re-encode.
+            if save_output:
+                dest = resolve_save_path(
+                    save_location, output_folder, filename_prefix, ext,
+                    width=w, height=h, index=0,
+                )
+                shutil.copy2(tmp_path, dest)
 
             filename = f"{filename_prefix}_00000.{ext}"
             upload_file_to_slack(

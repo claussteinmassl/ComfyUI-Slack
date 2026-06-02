@@ -44,6 +44,11 @@ _user_cache: "dict[str, list[str]] | None" = None
 _user_built_at: float = 0.0
 _user_lock = Lock()
 
+# user id -> DM (D…) channel id. conversations_open is idempotent, but caching
+# spares a round-trip on repeated sends to the same user.
+_dm_cache: "dict[str, str]" = {}
+_dm_lock = Lock()
+
 
 class AmbiguousNameError(ValueError):
     """A user name matched more than one Slack user.
@@ -183,6 +188,67 @@ def resolve_user(client, value: str) -> str:
         f'Slack user "{value}" not found. Check the spelling, or use the raw '
         "user ID (U…)."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Destination resolution (channel or user DM) — used by the send nodes
+# --------------------------------------------------------------------------- #
+def _open_dm(client, uid: str) -> str:
+    """Return the DM (D…) channel id for *uid*, opening it if needed (cached)."""
+    with _dm_lock:
+        hit = _dm_cache.get(uid)
+    if hit:
+        return hit
+    try:
+        resp = client.conversations_open(users=uid)
+    except SlackApiError as e:
+        err = e.response.get("error", "") if getattr(e, "response", None) else ""
+        raise ValueError(
+            f"Could not open a DM with Slack user {uid} ({err}). The bot needs the "
+            "im:write scope — add it and reinstall the app."
+        ) from e
+    dm = (resp.get("channel") or {}).get("id")
+    if not dm:
+        raise ValueError(f"Could not open a DM with Slack user {uid}.")
+    with _dm_lock:
+        _dm_cache[uid] = dm
+    return dm
+
+
+def resolve_destination(client, value: str) -> str:
+    """Resolve a send target — a channel or a user — to a channel id.
+
+    A channel (``#general`` / ``general`` / ``C…``/``G…``/``D…``) resolves to its
+    id; a user (``@alice`` / ``U…``/``W…``) opens a DM and returns its ``D…`` id.
+    A bare name is tried as a channel first, then as a user. Raises ValueError
+    (or AmbiguousNameError) with a clear message when nothing matches.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError(
+            "No Slack destination given. Enter a channel (#general) or a user (@alice)."
+        )
+    # Explicit user → DM.
+    if raw.startswith("@") or _USER_ID_RE.match(raw):
+        return _open_dm(client, resolve_user(client, raw))
+    # Explicit channel.
+    if raw.startswith("#") or _CHANNEL_ID_RE.match(raw):
+        return resolve_channel(client, raw)
+    # Bare name: prefer a channel, then fall back to a user DM.
+    try:
+        return resolve_channel(client, raw)
+    except ValueError:
+        pass
+    try:
+        uid = resolve_user(client, raw)
+    except AmbiguousNameError:
+        raise  # keep the helpful "matches N users" message
+    except ValueError:
+        raise ValueError(
+            f'Slack destination "{value}" not found as a channel or a user. '
+            "Prefix with # for a channel or @ for a user, or use a raw ID."
+        )
+    return _open_dm(client, uid)
 
 
 # --------------------------------------------------------------------------- #

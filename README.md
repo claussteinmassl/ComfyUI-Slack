@@ -1,6 +1,6 @@
 # ComfyUI-Slack
 
-Send generated images and videos directly to a Slack channel from within a ComfyUI workflow.
+Send generated images, videos, text, and audio directly to a Slack channel from within a ComfyUI workflow.
 
 ## Installation
 
@@ -66,6 +66,7 @@ Socket Mode, interactivity, and event subscriptions in a single step.
         "channels:read",
         "groups:read",
         "users:read",
+        "im:write",
         "app_mentions:read",
         "files:read"
       ]
@@ -91,8 +92,9 @@ Socket Mode, interactivity, and event subscriptions in a single step.
 > flaky (even the sample manifest can fail to validate). Use the **JSON** toggle instead.
 
 This manifest configures **both** the send nodes and the Slack listener. The scopes
-`files:write`, `chat:write`, `channels:read`, and `groups:read` cover the send nodes (the last two
-let you type a channel **name** instead of an ID — public and private respectively); the listener
+`files:write`, `chat:write`, `channels:read`, `groups:read`, and `im:write` cover the send nodes
+(`channels:read`/`groups:read` let you type a channel **name** instead of an ID — public and
+private respectively; `im:write` lets you send directly to a **user** as a DM); the listener
 additionally needs `users:read` (resolve usernames in the allow-list), `app_mentions:read`, and
 `files:read`, plus the entire `"settings"` block (Socket Mode, interactivity, and the `app_mention`
 event). If you only want the send nodes you can drop `users:read`, `app_mentions:read`,
@@ -129,6 +131,7 @@ In the left sidebar go to **OAuth & Permissions**, scroll to **Bot Token Scopes*
 | `chat:write` | Post messages to channels |
 | `channels:read` | Resolve **public** channel names to IDs |
 | `groups:read` | Resolve **private** channel names to IDs |
+| `im:write` | Send directly to a **user** as a DM |
 
 ### 3. Install the App to Your Workspace
 
@@ -158,11 +161,18 @@ export SLACK_BOT_TOKEN="xoxb-your-token-here"
 
 Add that line to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.) to make it permanent.
 
-### 6. Choose a Channel
+### 6. Choose a Destination
 
-The nodes accept a channel **name or ID** — `#general`, `general`, or the raw ID `C0B6SUZMHC6`
-all work. Names are resolved to IDs automatically (this is what the `channels:read` / `groups:read`
-scopes are for). For a **private** channel, the bot must be a member, so invite it first:
+The nodes' `channel` field accepts a **channel or a user**:
+
+| You enter | Goes to |
+|-----------|---------|
+| `#general`, `general`, or `C0B6SUZMHC6` | that channel |
+| `@alice`, or a user ID `U…` | a **direct message** to that user (needs `im:write`) |
+
+Names resolve to IDs automatically. A bare name with no `#`/`@` is treated as a channel first, then
+a user — prefix with `#` or `@` to be explicit. For a **private** channel the bot must be a member,
+so invite it first:
 
 ```
 /invite @ComfyUI
@@ -348,8 +358,11 @@ Sends one or more images from a batch to a Slack channel.
 | Input | Type | Description |
 |-------|------|-------------|
 | `images` | IMAGE | Image tensor batch |
-| `channel` | STRING | Slack channel ID (e.g. `C0B6SUZMHC6`) |
+| `channel` | STRING | Channel or user — `#general`, `@alice`, or a raw ID. A user is sent a DM. |
 | `filename_prefix` | STRING | Base name for the uploaded file |
+| `save_output` | BOOLEAN | Also write the image to disk (see [Saving a local copy](#saving-a-local-copy)) |
+| `save_location` | COMBO | `ComfyUI output folder` or `Absolute path` |
+| `output_folder` | STRING | Base folder for the saved copy; used only in `Absolute path` mode |
 | `format` | COMBO | `PNG`, `JPEG`, or `WEBP` |
 | `quality` | INT 1–100 | JPEG/WEBP quality; ignored for PNG |
 | `title` *(optional)* | STRING | File title shown in Slack |
@@ -372,8 +385,11 @@ Encodes a frame batch into a video via FFmpeg and uploads it to a Slack channel.
 | Input | Type | Description |
 |-------|------|-------------|
 | `images` | IMAGE | Frame batch (B, H, W, C) |
-| `channel` | STRING | Slack channel ID |
+| `channel` | STRING | Channel or user — `#general`, `@alice`, or a raw ID. A user is sent a DM. |
 | `filename_prefix` | STRING | Base name for the uploaded file |
+| `save_output` | BOOLEAN | Also write the video to disk (see [Saving a local copy](#saving-a-local-copy)) |
+| `save_location` | COMBO | `ComfyUI output folder` or `Absolute path` |
+| `output_folder` | STRING | Base folder for the saved copy; used only in `Absolute path` mode |
 | `frame_rate` | FLOAT | Playback frame rate (1–120 fps) |
 | `format` | COMBO | `h264-mp4`, `h265-mp4`, `vp9-webm`, or `gif` |
 | `quality` | INT 0–100 | 100 = best quality, 0 = smallest file |
@@ -391,6 +407,73 @@ Encodes a frame batch into a video via FFmpeg and uploads it to a Slack channel.
 | `gif` | GIF palette | GIF | N/A |
 
 Frames are padded to even dimensions automatically (required by most codecs). FFmpeg is bundled via `imageio-ffmpeg` — no separate installation needed.
+
+### SlackSendText
+
+Posts a text message to a Slack channel (or as a DM). The message field accepts standard Markdown, which is translated to Slack's formatting before sending.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| `text` | STRING (multiline) | Message body; Markdown is translated to Slack formatting |
+| `channel` | STRING | Channel or user — `#general`, `@alice`, or a raw ID. A user is sent a DM. |
+| `filename_prefix` | STRING | Base name for the saved `.md` copy (only used when `save_output` is on) |
+| `save_output` | BOOLEAN | Also write the message to disk as a `.md` file (see [Saving a local copy](#saving-a-local-copy)) |
+| `save_location` | COMBO | `ComfyUI output folder` or `Absolute path` |
+| `output_folder` | STRING | Base folder for the saved copy; used only in `Absolute path` mode |
+| `thread_ts` *(optional)* | STRING | Thread timestamp to reply under; auto-filled by the Slack listener |
+| `user_id` *(optional)* | STRING | User to `@`-mention at the start of the message; auto-filled by the Slack listener |
+
+**Markdown translation:** standard Markdown is rewritten to Slack `mrkdwn`:
+
+| Markdown | Slack |
+|----------|-------|
+| `**bold**` / `__bold__` | `*bold*` |
+| `*italic*` / `_italic_` | `_italic_` |
+| `~~strike~~` | `~strike~` |
+| `[text](url)` | `<url\|text>` |
+| `# Heading` | `*Heading*` (mrkdwn has no headings) |
+| `- item` | `• item` |
+| `` `code` `` / ```` ```block``` ```` | left as-is (already valid in Slack) |
+
+The local copy (when `save_output` is on) stores the **original** Markdown source, not the translated text.
+
+### SlackSendAudio
+
+Encodes an `AUDIO` input via FFmpeg and uploads it to a Slack channel as a standalone audio file.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| `audio` | AUDIO | Audio to send |
+| `channel` | STRING | Channel or user — `#general`, `@alice`, or a raw ID. A user is sent a DM. |
+| `filename_prefix` | STRING | Base name for the uploaded file |
+| `save_output` | BOOLEAN | Also write the audio to disk (see [Saving a local copy](#saving-a-local-copy)) |
+| `save_location` | COMBO | `ComfyUI output folder` or `Absolute path` |
+| `output_folder` | STRING | Base folder for the saved copy; used only in `Absolute path` mode |
+| `format` | COMBO | `mp3`, `m4a`, `opus`, `flac`, or `wav` |
+| `quality` | INT 1–100 | Bitrate for lossy formats; ignored for `flac`/`wav` |
+| `title` *(optional)* | STRING | File title shown in Slack |
+| `message` *(optional)* | STRING | Message posted alongside the file |
+
+**Supported formats:**
+
+| Format | Codec | Extension | Quality |
+|--------|-------|-----------|---------|
+| `mp3` | libmp3lame | `.mp3` | 1–100 → 32–320 kbps |
+| `m4a` | aac | `.m4a` | 1–100 → 32–320 kbps |
+| `opus` | libopus | `.opus` | 1–100 → 32–320 kbps |
+| `flac` | flac | `.flac` | Lossless (quality ignored) |
+| `wav` | pcm_s16le | `.wav` | Lossless (quality ignored) |
+
+Audio is encoded by piping the waveform to the bundled FFmpeg — no separate installation needed.
+
+### Saving a local copy
+
+All four send nodes can keep a local copy of what they send. Saving is **additive** — the content is always sent to Slack, and turning `save_output` on simply also writes it to disk (before sending, so the local copy survives even if Slack errors). The text node saves a `.md` file; the others save the uploaded media file.
+
+- **`ComfyUI output folder`** — writes into ComfyUI's standard `output/` directory using the same naming as the built-in Save nodes: `{filename_prefix}_{counter:05}_.{ext}`. `filename_prefix` may include a subfolder (e.g. `renders/Clip`), and the counter auto-increments so existing files are never overwritten.
+- **`Absolute path`** — writes into the `output_folder` you specify (created if missing) as `{filename_prefix}_{index:05d}.{ext}`. Leaving `output_folder` empty in this mode raises an error.
+
+In the node UI, `save_location` and `output_folder` are greyed out while `save_output` is off, and `output_folder` stays greyed out unless `Absolute path` is selected.
 
 ## Troubleshooting
 
