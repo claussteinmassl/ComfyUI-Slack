@@ -18,10 +18,12 @@ ComfyUI-Slack/
 │   └── slack_send_audio.py      # SlackSendAudio — encodes AUDIO via FFmpeg, sends to Slack
 ├── utils/
 │   ├── slack_client.py          # get_client() + upload_file_to_slack() + post_message_to_slack()
+│   ├── slack_resolve.py         # resolve_destination()/resolve_channel()/resolve_user() — name→ID, channel-or-user
 │   ├── markdown_to_slack.py     # markdown_to_mrkdwn() — Markdown → Slack mrkdwn translator
 │   └── local_save.py            # resolve_save_path() + SAVE_LOCATIONS for the "Save output" toggle
 ├── js/
-│   └── slack_save_output.js     # greys out save-location widgets based on save_output / save_location
+│   ├── slack_save_output.js          # moves the save group to the bottom + greys it out per save_output / save_location
+│   └── slack_hide_listener_fields.js # hides the listener-only thread_ts / user_id widgets on all send nodes
 ├── requirements.txt
 └── pyproject.toml
 ```

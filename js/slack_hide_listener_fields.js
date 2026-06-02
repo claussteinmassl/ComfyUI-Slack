@@ -6,7 +6,12 @@ import { app } from "../../scripts/app.js";
 // hide their widgets in the editor. The inputs stay declared on the node, so the
 // listener's injection keeps working untouched; we only collapse the widgets so
 // they aren't drawn or editable, while preserving their (empty) value.
-const TARGET = new Set(["SlackSendImage", "SlackSendVideo"]);
+const TARGET = new Set([
+    "SlackSendImage",
+    "SlackSendVideo",
+    "SlackSendText",
+    "SlackSendAudio",
+]);
 const HIDE = ["thread_ts", "user_id"];
 
 function hideWidget(widget) {
