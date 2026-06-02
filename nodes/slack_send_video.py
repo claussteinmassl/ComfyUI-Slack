@@ -66,7 +66,7 @@ class SlackSendVideo:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "channel": ("STRING", {"default": "", "tooltip": "Slack channel ID (e.g. C1234567890). Right-click the channel in Slack → View channel details → copy the ID at the bottom."}),
+                "channel": ("STRING", {"default": "", "tooltip": "Slack channel name or ID (e.g. #general or C1234567890). Names are resolved automatically; the bot must be a member of private channels."}),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
                 "frame_rate": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 120.0, "step": 0.1}),
                 "format": (["h264-mp4", "h265-mp4", "vp9-webm", "gif"],),

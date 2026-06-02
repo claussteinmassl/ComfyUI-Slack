@@ -4,6 +4,8 @@ import re
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+from .slack_resolve import resolve_channel
+
 _CHANNEL_ID_RE = re.compile(r'^[CGDZ][A-Z0-9]{8,}$')
 
 
@@ -26,7 +28,10 @@ def upload_file_to_slack(
     message: str = "",
     thread_ts: str | None = None,
 ) -> None:
-    if not _CHANNEL_ID_RE.match(channel):
+    # Accept a channel name or ID; resolve_channel passes IDs through untouched
+    # (no API call) and turns names like "#general" into a C… ID.
+    channel = resolve_channel(client, channel)
+    if not _CHANNEL_ID_RE.match(channel):  # defense-in-depth; resolve_channel already guarantees this
         raise ValueError(
             f"'{channel}' is not a valid Slack channel ID. "
             "Slack requires the channel ID (e.g. C1234567890), not the channel name. "

@@ -64,6 +64,8 @@ Socket Mode, interactivity, and event subscriptions in a single step.
         "files:write",
         "chat:write",
         "channels:read",
+        "groups:read",
+        "users:read",
         "app_mentions:read",
         "files:read"
       ]
@@ -89,10 +91,12 @@ Socket Mode, interactivity, and event subscriptions in a single step.
 > flaky (even the sample manifest can fail to validate). Use the **JSON** toggle instead.
 
 This manifest configures **both** the send nodes and the Slack listener. The scopes
-`files:write`, `chat:write`, and `channels:read` cover the send nodes; the listener additionally
-needs `app_mentions:read` and `files:read` plus the entire `"settings"` block (Socket Mode,
-interactivity, and the `app_mention` event). If you only want the send nodes you can drop those
-two scopes and the `"settings"` block — or just leave them; the extras are harmless.
+`files:write`, `chat:write`, `channels:read`, and `groups:read` cover the send nodes (the last two
+let you type a channel **name** instead of an ID — public and private respectively); the listener
+additionally needs `users:read` (resolve usernames in the allow-list), `app_mentions:read`, and
+`files:read`, plus the entire `"settings"` block (Socket Mode, interactivity, and the `app_mention`
+event). If you only want the send nodes you can drop `users:read`, `app_mentions:read`,
+`files:read`, and the `"settings"` block — or just leave them; the extras are harmless.
 
 A manifest **cannot** create tokens or install the app, so a few steps remain manual:
 
@@ -122,8 +126,9 @@ In the left sidebar go to **OAuth & Permissions**, scroll to **Bot Token Scopes*
 | Scope | Purpose |
 |-------|---------|
 | `files:write` | Upload images and videos |
-| `channels:read` | Resolve channel names to IDs |
 | `chat:write` | Post messages to channels |
+| `channels:read` | Resolve **public** channel names to IDs |
+| `groups:read` | Resolve **private** channel names to IDs |
 
 ### 3. Install the App to Your Workspace
 
@@ -153,17 +158,18 @@ export SLACK_BOT_TOKEN="xoxb-your-token-here"
 
 Add that line to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.) to make it permanent.
 
-### 6. Find Your Channel ID
+### 6. Choose a Channel
 
-The nodes accept a **channel ID**, not a channel name. To find it in Slack:
+The nodes accept a channel **name or ID** — `#general`, `general`, or the raw ID `C0B6SUZMHC6`
+all work. Names are resolved to IDs automatically (this is what the `channels:read` / `groups:read`
+scopes are for). For a **private** channel, the bot must be a member, so invite it first:
 
-- Right-click the channel → **View channel details**
-- Scroll to the bottom of the dialog — the ID looks like `C0B6SUZMHC6`
-
-Alternatively, invite the bot to the channel first:
 ```
 /invite @ComfyUI
 ```
+
+> Prefer the raw ID? Right-click the channel → **View channel details** → scroll to the bottom;
+> it looks like `C0B6SUZMHC6`.
 
 ## Trigger Workflows from Slack (Socket Mode)
 
@@ -207,6 +213,7 @@ In addition to the bot token setup above, do the following in your Slack App:
   | `app_mentions:read` | Receive @mentions |
   | `files:read` | Download attached images/videos |
   | `chat:write` | Post status, errors, and choice buttons |
+  | `users:read` | Resolve usernames in `SLACK_ALLOWED_USERS` to IDs |
 
 - **Reinstall the app** to your workspace to apply the new scopes, and **invite the bot** to
   the channel (`/invite @ComfyUI`).
@@ -275,8 +282,8 @@ In addition to the bot token setup above, do the following in your Slack App:
 | `SLACK_APP_TOKEN` | yes | — | App-level token (`xapp-...`) |
 | `SLACK_BOT_TOKEN` | yes | — | Bot token (`xoxb-...`), reused from the send setup |
 | `SLACK_WORKFLOW_DIR` | yes | — | Folder containing `manifest.json` + templates |
-| `SLACK_ALLOWED_USERS` | one of these | empty | CSV of allowed user IDs (`U…`) |
-| `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channel IDs (`C…`) |
+| `SLACK_ALLOWED_USERS` | one of these | empty | CSV of allowed users — names or IDs (`@alice`, a display name, or `U…`) |
+| `SLACK_ALLOWED_CHANNELS` | one of these | empty | CSV of allowed channels — names or IDs (`#general` or `C…`) |
 | `SLACK_COMFY_URL` | no | auto | Override the local ComfyUI URL (e.g. `http://127.0.0.1:8188`) |
 | `SLACK_MAX_INPUT_MB` | no | `20` | Max size of an attachment to download |
 | `SLACK_MAX_FANOUT` | no | `25` | Max number of runs one message may fan out into (see below) |
@@ -295,6 +302,12 @@ In addition to the bot token setup above, do the following in your Slack App:
 > `SLACK_ALLOWED_CHANNELS`, every trigger is refused. Each trigger queues a GPU job on your
 > machine, so list only the users/channels you trust.
 
+> **Names or IDs in the allow-lists.** Entries may be names (`@alice`, `#general`) or raw IDs
+> (`U…`, `C…`); names are resolved automatically. A name that can't be resolved — a typo, an
+> ambiguous display name, or a missing `users:read`/`groups:read` scope — is **skipped with a
+> warning** in the ComfyUI log rather than failing; ID entries always work. So a scope mistake
+> degrades to "ID-only", it never locks everyone out.
+
 > **Running the listener on several machines.** You can point multiple machines at the *same*
 > Slack app to share the load. Slack delivers each event to exactly one connection (at random,
 > up to 10 connections per app), so a request runs on whichever machine happens to receive it —
@@ -311,7 +324,7 @@ In addition to the bot token setup above, do the following in your Slack App:
 $env:SLACK_LISTENER_ENABLED = "1"
 $env:SLACK_APP_TOKEN = "xapp-your-token-here"
 $env:SLACK_WORKFLOW_DIR = "C:\path\to\your\workflows"
-$env:SLACK_ALLOWED_USERS = "U0123ABC,U0456DEF"
+$env:SLACK_ALLOWED_USERS = "@alice,U0456DEF"   # names or IDs
 ```
 
 On startup you should see `[ComfyUI-Slack] Socket Mode listener started.` and a line listing
@@ -385,7 +398,15 @@ Frames are padded to even dimensions automatically (required by most codecs). FF
 
 **`Slack upload failed: not_in_channel`** — the bot hasn't been invited to the channel. Run `/invite @ComfyUI` in Slack.
 
-**`Slack upload failed: channel_not_found`** — double-check the channel ID in the node. Use the ID (e.g. `C0B6SUZMHC6`), not the channel name.
+**`Slack channel "…" not found`** — the channel name in the node couldn't be resolved. Check the
+spelling; for a **private** channel, invite the bot first (`/invite @ComfyUI`) — private channels
+resolve only when the bot is a member, and need the `groups:read` scope. You can always fall back
+to the raw channel ID (e.g. `C0B6SUZMHC6`).
+
+**Allow-list names are ignored** — a name in `SLACK_ALLOWED_USERS`/`SLACK_ALLOWED_CHANNELS` is
+skipped (with a warning in the ComfyUI log) when it can't be resolved: a typo, an ambiguous
+display name, or a missing `users:read`/`groups:read` scope. Add the scope and **reinstall the
+app**, fix the spelling, or use the raw ID (`U…`/`C…`).
 
 **FFmpeg encoding failed** — check that the frame batch is not empty and that the selected codec is compatible with your FFmpeg build.
 

@@ -7,4 +7,5 @@ CLAUDE.md
 
 # Dev-only
 .github/
+tests/
 *.tmp.*

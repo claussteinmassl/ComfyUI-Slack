@@ -24,7 +24,7 @@ class SlackSendImage:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "channel": ("STRING", {"default": "", "tooltip": "Slack channel ID (e.g. C1234567890). Right-click the channel in Slack → View channel details → copy the ID at the bottom."}),
+                "channel": ("STRING", {"default": "", "tooltip": "Slack channel name or ID (e.g. #general or C1234567890). Names are resolved automatically; the bot must be a member of private channels."}),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
                 "format": (["PNG", "JPEG", "WEBP"],),
                 "quality": ("INT", {"default": 85, "min": 1, "max": 100, "step": 1}),

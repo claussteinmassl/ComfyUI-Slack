@@ -56,12 +56,20 @@ def comfy_api_key() -> str | None:
 
 
 def allowed_users() -> set[str]:
-    """Slack user IDs (Uxxxx) permitted to trigger workflows."""
+    """Users permitted to trigger workflows, as names or IDs (Uxxxx).
+
+    Names (@handle / display name) are resolved to IDs by slack_resolve during
+    authorization; raw IDs pass through.
+    """
     return _csv(os.environ.get("SLACK_ALLOWED_USERS"))
 
 
 def allowed_channels() -> set[str]:
-    """Slack channel IDs (Cxxxx) permitted to trigger workflows."""
+    """Channels permitted to trigger workflows, as names or IDs (Cxxxx).
+
+    Names (#channel) are resolved to IDs by slack_resolve during authorization;
+    raw IDs pass through.
+    """
     return _csv(os.environ.get("SLACK_ALLOWED_CHANNELS"))
 
 

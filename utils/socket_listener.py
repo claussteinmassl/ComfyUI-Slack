@@ -17,7 +17,7 @@ from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 
-from . import comfy_trigger, config, router, slack_messages, workflow_registry
+from . import comfy_trigger, config, router, slack_messages, slack_resolve, workflow_registry
 from .router import NeedsChoice, Rejected, Resolved
 
 try:
@@ -37,9 +37,14 @@ _registry: dict = {}
 # Authorization
 # --------------------------------------------------------------------------- #
 def _authorized(req) -> bool:
-    users, channels = config.allowed_users(), config.allowed_channels()
-    if not users and not channels:
-        return False  # default-deny
+    raw_users, raw_channels = config.allowed_users(), config.allowed_channels()
+    if not raw_users and not raw_channels:
+        return False  # default-deny — decided on raw config, before any API call
+    # Allow-list entries may be names or IDs. Resolution never raises: a name
+    # that can't be resolved (typo, missing scope, ambiguous) is skipped, so a
+    # misconfiguration degrades to "ID-only" rather than locking everyone out.
+    users = slack_resolve.resolve_allowed_users(_web_client, raw_users)
+    channels = slack_resolve.resolve_allowed_channels(_web_client, raw_channels)
     return req.user in users or req.channel in channels
 
 
