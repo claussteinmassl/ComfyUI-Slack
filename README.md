@@ -26,6 +26,14 @@ In **ComfyUI Manager**, open **Custom Nodes Manager**, search for **ComfyUI-Slac
 
 ComfyUI-Slack requires a Slack Bot Token (`xoxb-...`) from a dedicated Slack App.
 
+> **Why create your own app instead of installing one from the Slack Marketplace?**
+> ComfyUI-Slack has no hosted service behind it — it runs entirely on *your* machine and talks
+> to Slack directly using a token you control. A Marketplace app would route your images and
+> messages through someone else's servers; here nothing leaves your machine except the calls to
+> Slack's own API. Slack tokens are also tied to a single workspace, so the app must be created
+> and installed inside *your* workspace to get a token that works there. Creating the app is a
+> one-time, few-minute setup — the manifest below makes it nearly copy-paste.
+
 You can create the app two ways: paste a ready-made **manifest** (fast), or click through the
 settings **by hand** (so you understand what each one does). Both produce the same app — pick one.
 
