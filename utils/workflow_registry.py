@@ -11,8 +11,9 @@ import os
 import re
 from dataclasses import dataclass, field
 
-# Markers a template must contain to be usable.
-REQUIRED_MARKERS = ("SLACK_PROMPT", "SLACK_OUTPUT")
+# Markers a template must contain to be usable. Only the output node is
+# mandatory; SLACK_PROMPT and the input markers are optional.
+REQUIRED_MARKERS = ("SLACK_OUTPUT",)
 VALID_MODALITIES = ("text", "image", "video", "any")
 
 # Image-input slot markers: bare == slot 1, _<n> == slot n.

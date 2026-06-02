@@ -232,13 +232,15 @@ In addition to the bot token setup above, do the following in your Slack App:
 
 1. In ComfyUI, enable **dev mode** (*Settings → Enable Dev Mode Options*) so the
    **Save (API Format)** button appears.
-2. Build a workflow that **ends in a `Send Image to Slack` / `Send Video to Slack` node**,
-   then **rename** these nodes (right-click → *Title*) so the listener can find them:
+2. Build a workflow that **ends in a `Send Image to Slack` / `Send Video to Slack` node**.
+   The final send node is the only one the listener *requires*; **rename** it
+   (right-click → *Title*) to `SLACK_OUTPUT`. Rename any of the optional input
+   nodes too if your workflow uses them:
 
    | Rename this node to | Role |
    |---------------------|------|
-   | `SLACK_PROMPT` | The text prompt node (e.g. the positive `CLIPTextEncode`) — receives the message text |
-   | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel, thread, and the triggering user to @-mention |
+   | `SLACK_OUTPUT` | The final `Send … to Slack` node — receives the channel, thread, and the triggering user to @-mention. **Required.** |
+   | `SLACK_PROMPT` *(optional)* | The text prompt node (e.g. the positive `CLIPTextEncode`) — receives the message text. Omit it for fixed-prompt or input-only workflows; the message text is then ignored. |
    | `SLACK_INPUT_IMAGE` *(optional)* | A `LoadImage` node — receives an attached image (slot 1) |
    | `SLACK_INPUT_IMAGE_2`, `SLACK_INPUT_IMAGE_3`, … *(optional)* | Extra `LoadImage` nodes for workflows that take several distinct input images. Slot numbers must be contiguous (`SLACK_INPUT_IMAGE`, then `_2`, `_3`, …); the *n*-th attached image fills slot *n* |
    | `SLACK_INPUT_VIDEO` *(optional)* | A video-load node (e.g. VideoHelperSuite `VHS_LoadVideo`) — receives an attached video |
@@ -506,9 +508,9 @@ GUI isn't present for a listener-triggered run, and credits alone don't authenti
 Generate an API key at [platform.comfy.org](https://platform.comfy.org) and set
 `SLACK_COMFY_API_KEY` before launching ComfyUI.
 
-**`template missing required node title marker(s)`** — rename the prompt node to `SLACK_PROMPT`
-and the final Slack send node to `SLACK_OUTPUT` in your workflow, then re-export it with
-**Save (API Format)**.
+**`template missing required node title marker(s)`** — rename the final Slack send node to
+`SLACK_OUTPUT` in your workflow (the only required marker), then re-export it with
+**Save (API Format)**. A `SLACK_PROMPT` node is optional.
 
 **Mention does nothing** — make sure the bot is invited to the channel, `app_mention` is
 subscribed under Event Subscriptions, and Socket Mode is enabled. Re-install the app after
