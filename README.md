@@ -44,38 +44,55 @@ Socket Mode, interactivity, and event subscriptions in a single step.
 
 1. Go to [https://api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**.
 2. Select your workspace, then click **Next**.
-3. Paste the manifest below (leave the format on **YAML**), click **Next**, then **Create**.
+3. Switch the format toggle to **JSON**, paste the manifest below, click **Next**, then **Create**.
 
-```yaml
-display_information:
-  name: ComfyUI
-  description: Send ComfyUI images and videos to Slack, and trigger workflows from Slack.
-features:
-  bot_user:
-    display_name: ComfyUI
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - files:write          # upload images and videos
-      - chat:write           # post messages, status, and choice buttons
-      - channels:read        # resolve channel names to IDs
-      - app_mentions:read    # listener only — receive @mentions
-      - files:read           # listener only — download attached images/videos
-settings:
-  event_subscriptions:       # listener only
-    bot_events:
-      - app_mention
-  interactivity:             # listener only — needed for the choice buttons
-    is_enabled: true
-  socket_mode_enabled: true  # listener only — outbound WebSocket, no public URL needed
-  org_deploy_enabled: false
-  token_rotation_enabled: false
+```json
+{
+  "display_information": {
+    "name": "ComfyUI",
+    "description": "Send ComfyUI images and videos to Slack, and trigger workflows from Slack."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "ComfyUI",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "files:write",
+        "chat:write",
+        "channels:read",
+        "app_mentions:read",
+        "files:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true
+    },
+    "socket_mode_enabled": true,
+    "org_deploy_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
 ```
 
-This manifest configures **both** the send nodes and the Slack listener. If you only want the
-send nodes, you can delete the lines marked *“listener only”* (and the whole `settings:` block) —
-or just leave them; the extra scopes are harmless.
+> Slack's *Create from a manifest* screen defaults to YAML and its YAML parser is currently
+> flaky (even the sample manifest can fail to validate). Use the **JSON** toggle instead.
+
+This manifest configures **both** the send nodes and the Slack listener. The scopes
+`files:write`, `chat:write`, and `channels:read` cover the send nodes; the listener additionally
+needs `app_mentions:read` and `files:read` plus the entire `"settings"` block (Socket Mode,
+interactivity, and the `app_mention` event). If you only want the send nodes you can drop those
+two scopes and the `"settings"` block — or just leave them; the extras are harmless.
 
 A manifest **cannot** create tokens or install the app, so a few steps remain manual:
 
