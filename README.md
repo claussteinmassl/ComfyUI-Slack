@@ -24,7 +24,64 @@ In **ComfyUI Manager**, open **Custom Nodes Manager**, search for **ComfyUI-Slac
 
 ## Slack App Setup
 
-ComfyUI-Slack requires a Slack Bot Token (`xoxb-...`) from a dedicated Slack App. Follow these steps once to get it.
+ComfyUI-Slack requires a Slack Bot Token (`xoxb-...`) from a dedicated Slack App.
+
+You can create the app two ways: paste a ready-made **manifest** (fast), or click through the
+settings **by hand** (so you understand what each one does). Both produce the same app — pick one.
+
+### Quick start: create the app from a manifest (recommended)
+
+Slack can build an app from a manifest that pre-fills the name, scopes, and — for the listener —
+Socket Mode, interactivity, and event subscriptions in a single step.
+
+1. Go to [https://api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**.
+2. Select your workspace, then click **Next**.
+3. Paste the manifest below (leave the format on **YAML**), click **Next**, then **Create**.
+
+```yaml
+display_information:
+  name: ComfyUI
+  description: Send ComfyUI images and videos to Slack, and trigger workflows from Slack.
+features:
+  bot_user:
+    display_name: ComfyUI
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - files:write          # upload images and videos
+      - chat:write           # post messages, status, and choice buttons
+      - channels:read        # resolve channel names to IDs
+      - app_mentions:read    # listener only — receive @mentions
+      - files:read           # listener only — download attached images/videos
+settings:
+  event_subscriptions:       # listener only
+    bot_events:
+      - app_mention
+  interactivity:             # listener only — needed for the choice buttons
+    is_enabled: true
+  socket_mode_enabled: true  # listener only — outbound WebSocket, no public URL needed
+  org_deploy_enabled: false
+  token_rotation_enabled: false
+```
+
+This manifest configures **both** the send nodes and the Slack listener. If you only want the
+send nodes, you can delete the lines marked *“listener only”* (and the whole `settings:` block) —
+or just leave them; the extra scopes are harmless.
+
+A manifest **cannot** create tokens or install the app, so a few steps remain manual:
+
+- **Install the app** to your workspace and copy the **Bot User OAuth Token** (`xoxb-...`) —
+  see steps **3–5** below.
+- **Invite the bot** to your channel: `/invite @ComfyUI`.
+- **(Listener only)** create an **App-Level Token** with the `connections:write` scope (`xapp-...`).
+  App-level tokens can't be set via manifest — see
+  [Trigger Workflows from Slack](#trigger-workflows-from-slack-socket-mode).
+
+### Manual setup (what the manifest configures)
+
+Prefer to configure the app by hand, or want to understand each setting the manifest applies?
+Follow these steps instead — they produce exactly the same app.
 
 ### 1. Create a Slack App
 
@@ -105,6 +162,10 @@ you only use the send nodes you can ignore this section entirely.
 5. The workflow ends in a **Send to Slack** node, which posts the result back in your thread.
 
 ### 1. Extra Slack App configuration
+
+> **If you created the app from the manifest above**, Socket Mode, Interactivity, the
+> `app_mention` event subscription, and the extra bot scopes are **already set** — you only
+> need to create the **App-Level Token** (third bullet) and reinstall/invite the bot.
 
 In addition to the bot token setup above, do the following in your Slack App:
 
