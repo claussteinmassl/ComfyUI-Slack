@@ -1,6 +1,70 @@
 # ComfyUI-Slack
 
-Send generated images, videos, text, and audio directly to a Slack channel from within a ComfyUI workflow.
+<p align="center">
+  <img src="images/comfy_slack_connection.png" alt="ComfyUI → Slack" width="600">
+</p>
+
+Send generated images, videos, text, and audio directly to a Slack channel from within a ComfyUI
+workflow. Drop a **Send to Slack** node at the end of any workflow and the result lands in your
+Slack channel — or a direct message — the moment it finishes rendering. No manual downloading,
+no copy-paste, no leaving your chat.
+
+It also works the **other way around**: @mention the bot in Slack with a prompt (and optionally an
+image or video) and it runs the matching ComfyUI workflow, posting the result back in the same
+thread. See [Trigger Workflows from Slack](#trigger-workflows-from-slack-socket-mode).
+
+## What it looks like
+
+### 🖼️ Send Image
+
+Wire an `IMAGE` output into **Send Image to Slack** — pick the channel (or a user for a DM),
+format, and quality, and it's uploaded the instant the workflow finishes.
+
+<table>
+  <tr>
+    <td width="58%"><img src="images/send_image.png" alt="Send Image to Slack node"></td>
+    <td width="42%"><img src="images/slack_image.png" alt="Image delivered in Slack"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>The node in ComfyUI</em></td>
+    <td align="center"><em>…lands in your Slack channel</em></td>
+  </tr>
+</table>
+
+### 🎬 Send Video
+
+**Send Video to Slack** encodes a frame batch (with optional audio) via the bundled FFmpeg into
+H.264/H.265/VP9/GIF and uploads the clip — no separate FFmpeg install required.
+
+<table>
+  <tr>
+    <td width="58%"><img src="images/send_video.png" alt="Send Video to Slack node"></td>
+    <td width="42%"><img src="images/slack_video.png" alt="Video delivered in Slack"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>The node in ComfyUI</em></td>
+    <td align="center"><em>…plays back in Slack</em></td>
+  </tr>
+</table>
+
+### 💬 Send Text
+
+**Send Text to Slack** posts a Markdown message — perfect for piping an LLM caption, a prompt, or
+a status line straight into the channel. Standard Markdown is translated to Slack's formatting
+automatically.
+
+<p align="center">
+  <img src="images/send_text.png" alt="Send Text to Slack node" width="820">
+</p>
+
+### 🔊 Send Audio
+
+**Send Audio to Slack** encodes an `AUDIO` input (MP3/M4A/Opus/FLAC/WAV) and uploads it as a
+playable audio file.
+
+<p align="center">
+  <img src="images/send_audio.png" alt="Send Audio to Slack node" width="640">
+</p>
 
 ## Installation
 
@@ -191,16 +255,48 @@ This runs as a background listener inside ComfyUI using Slack **Socket Mode** �
 WebSocket, so **no public URL or ngrok is needed**. It is **opt-in** and off by default; if
 you only use the send nodes you can ignore this section entirely.
 
+<p align="center">
+  <img src="images/poster_mockup_workflow_example.png" alt="Poster-mockup workflow triggered from Slack" width="820">
+</p>
+
+*Example: an image attached to a Slack @mention enters the workflow at `SLACK_INPUT_IMAGE`, gets
+composited into a framed poster mockup, and the `SLACK_OUTPUT` node sends the finished render back
+to the same Slack thread.*
+
 ### How it works
 
 1. You save one or more workflows in **API format** and register them in a `manifest.json`.
 2. You @mention the bot: `@ComfyUI a cat astronaut` (optionally attach an image/video).
 3. The listener picks a workflow **deterministically** (no AI):
    - by **input type** — no file → a `text` workflow, image → an `image` workflow, video → a `video` workflow;
-   - an explicit **`[name]` prefix** always wins, e.g. `@ComfyUI [img2img] make it watercolor`;
+   - an explicit **`[name]` prefix** always wins, e.g. `@ComfyUI [poster-mockup] make a poster`;
    - if several workflows still match, the bot posts **buttons** to choose.
 4. The listener injects your prompt / file / channel / thread into the workflow and queues it.
 5. The workflow ends in a **Send to Slack** node, which posts the result back in your thread.
+
+### In Slack, end to end
+
+**1. @mention the bot and attach an image.** Here `mockup` matches more than one workflow, so the
+keyword alone doesn't decide it.
+
+<p align="center">
+  <img src="images/slack_tag_comfy.png" alt="Tagging ComfyUI in Slack with an image" width="560">
+</p>
+
+**2. The bot asks which workflow to run.** When several workflows match, it posts buttons instead
+of guessing.
+
+<p align="center">
+  <img src="images/slack_buttons.png" alt="ComfyUI asks which workflow to run" width="420">
+</p>
+
+**3. Pick one, and the result comes back in the thread.** The bot confirms the queued run,
+@-mentions you, and posts the finished render — here the image composited into a framed poster
+mockup.
+
+<p align="center">
+  <img src="images/slack_receive_result.png" alt="Finished poster mockup posted back in Slack" width="420">
+</p>
 
 ### 1. Extra Slack App configuration
 
@@ -346,10 +442,17 @@ the loaded workflows in the ComfyUI terminal.
 
 | In Slack | Result |
 |----------|--------|
-| `@ComfyUI a neon city at night` | Runs the text workflow (or shows buttons if several match) |
-| `@ComfyUI [img2img] make it watercolor` + image | Forces the `img2img` workflow |
-| `@ComfyUI animate this` + image | Auto-picks the workflow whose `keywords` include `animate` |
+| `@ComfyUI mockup` + image | Matches both mockup workflows → shows the choice buttons |
+| `@ComfyUI [poster-mockup] make a poster` + image | Forces the `poster-mockup` workflow |
+| `@ComfyUI try this on a shirt` + image | Auto-picks `tshirt-mockup` via its `shirt` keyword |
 | `@ComfyUI help` | Lists the available workflows |
+
+`@ComfyUI help` replies with every registered workflow, its required input, and a one-line
+description pulled from your `manifest.json`:
+
+<p align="center">
+  <img src="images/slack_help.png" alt="@ComfyUI help listing the available workflows" width="820">
+</p>
 
 ## Nodes
 
