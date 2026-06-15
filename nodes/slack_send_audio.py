@@ -43,7 +43,7 @@ class SlackSendAudio:
             "optional": {
                 "title": ("STRING", {"default": ""}),
                 "message": ("STRING", {"default": ""}),
-                "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
+                "thread_ts": ("STRING", {"default": "", "forceInput": True, "tooltip": "Slack thread to reply under. Connect a Slack Thread Start node here to post into the same thread as other send nodes. Leave unconnected to post to the channel root. Also auto-filled by the Slack listener."}),
                 "user_id": ("STRING", {"default": "", "tooltip": "Slack user ID to @-mention in the result message. Auto-filled by the Slack listener."}),
             },
         }

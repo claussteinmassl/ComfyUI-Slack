@@ -23,7 +23,7 @@ class SlackSendText:
                 "output_folder": ("STRING", {"default": "", "placeholder": "D:/exports", "tooltip": "Base folder for the saved copy. Used only when save_location is 'Absolute path'; combined with filename_prefix."}),
             },
             "optional": {
-                "thread_ts": ("STRING", {"default": "", "tooltip": "Slack thread timestamp to reply under. Leave blank to post to the channel root. Auto-filled by the Slack listener."}),
+                "thread_ts": ("STRING", {"default": "", "forceInput": True, "tooltip": "Slack thread to reply under. Connect a Slack Thread Start node here to post into the same thread as other send nodes. Leave unconnected to post to the channel root. Also auto-filled by the Slack listener."}),
                 "user_id": ("STRING", {"default": "", "tooltip": "Slack user ID to @-mention at the start of the message. Auto-filled by the Slack listener."}),
             },
         }

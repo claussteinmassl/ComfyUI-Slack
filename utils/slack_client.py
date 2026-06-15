@@ -61,10 +61,12 @@ def post_message_to_slack(
     channel: str,
     text: str,
     thread_ts: str | None = None,
-) -> None:
+) -> str:
+    """Post a message and return its ``ts`` (the timestamp that identifies the
+    message — usable as a ``thread_ts`` to reply under it)."""
     channel = _resolve_and_validate(client, channel)
     try:
-        client.chat_postMessage(
+        resp = client.chat_postMessage(
             channel=channel,
             text=text,
             mrkdwn=True,
@@ -72,3 +74,4 @@ def post_message_to_slack(
         )
     except SlackApiError as e:
         raise RuntimeError(f"Slack message failed: {e.response['error']}") from e
+    return resp["ts"]

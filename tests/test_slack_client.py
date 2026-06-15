@@ -55,6 +55,7 @@ class _FakeClient:
         self.post_kwargs = kwargs
         if self.raise_exc:
             raise self.raise_exc
+        return {"ts": "1700000000.000100"}
 
 
 @pytest.fixture(autouse=True)
@@ -94,12 +95,13 @@ def test_upload_file_api_error_becomes_runtime_error():
 
 def test_post_message_passes_args():
     client = _FakeClient()
-    slack_client.post_message_to_slack(client, "#general", "hello", thread_ts="9.9")
+    ts = slack_client.post_message_to_slack(client, "#general", "hello", thread_ts="9.9")
     kw = client.post_kwargs
     assert kw["channel"] == "C012345678"
     assert kw["text"] == "hello"
     assert kw["mrkdwn"] is True
     assert kw["thread_ts"] == "9.9"
+    assert ts == "1700000000.000100"  # returns the posted message's ts
 
 
 def test_post_message_api_error_becomes_runtime_error():

@@ -2,12 +2,14 @@ from .nodes.slack_send_image import SlackSendImage
 from .nodes.slack_send_video import SlackSendVideo
 from .nodes.slack_send_text import SlackSendText
 from .nodes.slack_send_audio import SlackSendAudio
+from .nodes.slack_thread_start import SlackThreadStart
 
 NODE_CLASS_MAPPINGS = {
     "SlackSendImage": SlackSendImage,
     "SlackSendVideo": SlackSendVideo,
     "SlackSendText": SlackSendText,
     "SlackSendAudio": SlackSendAudio,
+    "SlackThreadStart": SlackThreadStart,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -15,6 +17,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SlackSendVideo": "Send Video to Slack",
     "SlackSendText": "Send Text to Slack",
     "SlackSendAudio": "Send Audio to Slack",
+    "SlackThreadStart": "Slack Thread Start",
 }
 
 # Frontend extension: greys out the save-location widgets when "Save output" is

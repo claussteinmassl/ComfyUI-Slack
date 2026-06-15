@@ -472,6 +472,7 @@ Sends one or more images from a batch to a Slack channel.
 | `quality` | INT 1–100 | JPEG/WEBP quality; ignored for PNG |
 | `title` *(optional)* | STRING | File title shown in Slack |
 | `message` *(optional)* | STRING | Message posted alongside the file |
+| `thread_ts` *(optional)* | STRING | Thread to reply under — connect a [SlackThreadStart](#slackthreadstart) node to group outputs in one thread; also auto-filled by the Slack listener |
 
 Each image in the batch is uploaded as a separate file named `{filename_prefix}_{index:05d}.{ext}`. The optional message is attached to the first file only.
 
@@ -501,6 +502,7 @@ Encodes a frame batch into a video via FFmpeg and uploads it to a Slack channel.
 | `audio` *(optional)* | AUDIO | Audio to mux into the video (not supported for GIF) |
 | `title` *(optional)* | STRING | File title shown in Slack |
 | `message` *(optional)* | STRING | Message posted alongside the file |
+| `thread_ts` *(optional)* | STRING | Thread to reply under — connect a [SlackThreadStart](#slackthreadstart) node to group outputs in one thread; also auto-filled by the Slack listener |
 
 **Supported formats:**
 
@@ -525,7 +527,7 @@ Posts a text message to a Slack channel (or as a DM). The message field accepts 
 | `save_output` | BOOLEAN | Also write the message to disk as a `.md` file (see [Saving a local copy](#saving-a-local-copy)) |
 | `save_location` | COMBO | `ComfyUI output folder` or `Absolute path` |
 | `output_folder` | STRING | Base folder for the saved copy; used only in `Absolute path` mode |
-| `thread_ts` *(optional)* | STRING | Thread timestamp to reply under; auto-filled by the Slack listener |
+| `thread_ts` *(optional)* | STRING | Thread to reply under — connect a [SlackThreadStart](#slackthreadstart) node to group outputs in one thread; also auto-filled by the Slack listener |
 | `user_id` *(optional)* | STRING | User to `@`-mention at the start of the message; auto-filled by the Slack listener |
 
 **Markdown translation:** standard Markdown is rewritten to Slack `mrkdwn`:
@@ -558,6 +560,7 @@ Encodes an `AUDIO` input via FFmpeg and uploads it to a Slack channel as a stand
 | `quality` | INT 1–100 | Bitrate for lossy formats; ignored for `flac`/`wav` |
 | `title` *(optional)* | STRING | File title shown in Slack |
 | `message` *(optional)* | STRING | Message posted alongside the file |
+| `thread_ts` *(optional)* | STRING | Thread to reply under — connect a [SlackThreadStart](#slackthreadstart) node to group outputs in one thread; also auto-filled by the Slack listener |
 
 **Supported formats:**
 
@@ -570,6 +573,36 @@ Encodes an `AUDIO` input via FFmpeg and uploads it to a Slack channel as a stand
 | `wav` | pcm_s16le | `.wav` | Lossless (quality ignored) |
 
 Audio is encoded by piping the waveform to the bundled FFmpeg — no separate installation needed.
+
+### SlackThreadStart
+
+Posts a root message to Slack and outputs its `thread_ts`. Wire that output into
+the `thread_ts` input of any send node (Image / Video / Text / Audio) to make all
+of them post into the **same Slack thread** — ideal when one workflow produces
+several outputs that belong together. The connection also makes the send nodes
+run after the thread has been opened.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| `channel` | STRING | Channel or user — `#general`, `@alice`, or a raw ID. A user starts the thread in a DM. |
+| `mode` | COMBO | `New thread each run` or `Reuse existing thread` (see below) |
+| `header` *(optional)* | STRING (multiline) | Text of the root message that opens the thread; Markdown is translated to Slack formatting |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| `thread_ts` | STRING | Timestamp of the root message — feed it into the send nodes' `thread_ts` inputs |
+
+**Modes:**
+
+- **New thread each run** — every workflow execution posts a fresh root and
+  starts a new thread.
+- **Reuse existing thread** — re-running the workflow keeps appending to the same
+  thread (new results land in the existing thread). The reused thread is
+  remembered for the current ComfyUI session; restarting ComfyUI (or changing the
+  channel/header) starts a new thread.
+
+A send node whose `thread_ts` is left **unconnected** posts to the channel root as
+usual, so adding this node is fully optional.
 
 ### Saving a local copy
 

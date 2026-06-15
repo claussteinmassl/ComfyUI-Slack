@@ -1,18 +1,22 @@
 import { app } from "../../scripts/app.js";
 
-// thread_ts and user_id are only ever set by the Slack listener (it injects the
-// real thread timestamp + triggering user id into the API graph at runtime).
-// They're useless — and easy to mis-fill — when a human drives the node, so we
-// hide their widgets in the editor. The inputs stay declared on the node, so the
-// listener's injection keeps working untouched; we only collapse the widgets so
-// they aren't drawn or editable, while preserving their (empty) value.
+// user_id is only ever set by the Slack listener (it injects the triggering
+// user id into the API graph at runtime). It's useless — and easy to mis-fill —
+// when a human drives the node, so we hide its widget in the editor. The input
+// stays declared on the node, so the listener's injection keeps working
+// untouched; we only collapse the widget so it isn't drawn or editable, while
+// preserving its (empty) value.
+//
+// thread_ts is intentionally NOT hidden: it's a connectable socket (forceInput)
+// so a Slack Thread Start node can be wired into it to group send nodes in one
+// thread. The listener still injects it as a literal value all the same.
 const TARGET = new Set([
     "SlackSendImage",
     "SlackSendVideo",
     "SlackSendText",
     "SlackSendAudio",
 ]);
-const HIDE = ["thread_ts", "user_id"];
+const HIDE = ["user_id"];
 
 function hideWidget(widget) {
     if (!widget || widget.type === "hidden-slack") return;
