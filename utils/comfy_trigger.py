@@ -67,10 +67,17 @@ def inject(workflow_graph: dict, req, images: list[str]) -> dict:
             node.setdefault("inputs", {})["video"] = req.input_path
         elif title == "SLACK_OUTPUT":
             inputs = node.setdefault("inputs", {})
-            inputs["channel"] = req.channel
-            inputs["thread_ts"] = req.thread_ts
-            if config.notify_user():
-                inputs["user_id"] = req.user
+            # A wired thread_ts (e.g. from a Slack Thread Start node) means the
+            # workflow itself fixes the destination channel/thread, so the
+            # sender's channel/thread/user must NOT override it -- the result is
+            # meant to land where the workflow points, not back at the sender.
+            # A connected input is serialized as a [node_id, slot] list; an
+            # unconnected one is a literal (or absent), so we still inject then.
+            if not isinstance(inputs.get("thread_ts"), list):
+                inputs["channel"] = req.channel
+                inputs["thread_ts"] = req.thread_ts
+                if config.notify_user():
+                    inputs["user_id"] = req.user
         else:
             m = _IMAGE_SLOT_RE.match(title)
             if m and req.input_kind == "image":
@@ -79,6 +86,28 @@ def inject(workflow_graph: dict, req, images: list[str]) -> dict:
                     node.setdefault("inputs", {})["image"] = images[idx]
 
     return graph
+
+
+def output_redirected(graph: dict) -> bool:
+    """True when the workflow sends its result somewhere other than the sender.
+
+    The result is "redirected" when every ``SLACK_OUTPUT`` send node has its
+    ``thread_ts`` wired to another node (e.g. a Slack Thread Start), so none of
+    them fall back to the sender's channel/thread that :func:`inject` would
+    otherwise inject. Used by the listener to word its confirmation message:
+    a redirected run won't post back to the requester, so it must not promise
+    that "the result will post here".
+    """
+    outputs = [
+        node for node in graph.values()
+        if isinstance(node, dict) and _title(node) == "SLACK_OUTPUT"
+    ]
+    if not outputs:
+        return False
+    return all(
+        isinstance(node.get("inputs", {}).get("thread_ts"), list)
+        for node in outputs
+    )
 
 
 def submit_prompt(graph: dict) -> str:

@@ -108,6 +108,53 @@ def test_inject_output_omits_user_when_notify_off(monkeypatch):
     assert "user_id" not in out["1"]["inputs"]
 
 
+def test_inject_output_skips_override_when_thread_ts_wired(monkeypatch):
+    # A wired thread_ts is a [node_id, slot] link; the workflow (e.g. a Slack
+    # Thread Start) owns the destination, so the sender's channel/thread/user
+    # must not clobber it.
+    monkeypatch.setattr(config, "notify_user", lambda: True)
+    graph = {"1": {"_meta": {"title": "SLACK_OUTPUT"},
+                   "inputs": {"channel": "PRESET", "thread_ts": ["7", 0]}}}
+    out = comfy_trigger.inject(graph, _req(channel="C1", thread_ts="9.9", user="U7"), [])
+    assert out["1"]["inputs"]["channel"] == "PRESET"
+    assert out["1"]["inputs"]["thread_ts"] == ["7", 0]
+    assert "user_id" not in out["1"]["inputs"]
+
+
+# --------------------------------------------------------------------------- #
+# output_redirected
+# --------------------------------------------------------------------------- #
+def test_output_redirected_true_when_thread_ts_wired():
+    graph = {"1": {"_meta": {"title": "SLACK_OUTPUT"},
+                   "inputs": {"thread_ts": ["7", 0]}}}
+    assert comfy_trigger.output_redirected(graph) is True
+
+
+def test_output_redirected_false_when_thread_ts_literal():
+    graph = {"1": {"_meta": {"title": "SLACK_OUTPUT"},
+                   "inputs": {"thread_ts": "123.45"}}}
+    assert comfy_trigger.output_redirected(graph) is False
+
+
+def test_output_redirected_false_when_thread_ts_absent():
+    graph = {"1": {"_meta": {"title": "SLACK_OUTPUT"}, "inputs": {}}}
+    assert comfy_trigger.output_redirected(graph) is False
+
+
+def test_output_redirected_false_without_output_node():
+    graph = {"1": {"_meta": {"title": "SLACK_PROMPT"}, "inputs": {"text": "x"}}}
+    assert comfy_trigger.output_redirected(graph) is False
+
+
+def test_output_redirected_requires_all_outputs_wired():
+    # One output redirected, one still posting to the sender -> not redirected.
+    graph = {
+        "1": {"_meta": {"title": "SLACK_OUTPUT"}, "inputs": {"thread_ts": ["7", 0]}},
+        "2": {"_meta": {"title": "SLACK_OUTPUT"}, "inputs": {"thread_ts": "1.0"}},
+    }
+    assert comfy_trigger.output_redirected(graph) is False
+
+
 def test_inject_does_not_mutate_original(monkeypatch):
     monkeypatch.setattr(config, "notify_user", lambda: True)
     graph = {"1": {"class_type": "CLIPTextEncode", "_meta": {"title": "SLACK_PROMPT"},

@@ -106,6 +106,22 @@ The root is created with `chat_postMessage` (which reliably returns the message
 / `RETURN_NAMES = ("thread_ts",)`. Leaving a send node's `thread_ts`
 unconnected posts to the channel root as before.
 
+### Listener output redirection
+
+A workflow triggered from Slack normally has its `SLACK_OUTPUT` send node's
+`channel`/`thread_ts`/`user_id` injected by `utils/comfy_trigger.py:inject()`,
+so the result posts back into the thread the request came from. **Wiring a
+`SlackThreadStart` (or any node) into the send node's `thread_ts` input opts out
+of that**: a connected input is serialized as a `[node_id, slot]` list, so
+`inject()` leaves `channel`/`thread_ts`/`user_id` untouched and the result lands
+wherever the workflow points (a different channel or a user DM) instead of back
+at the sender. `utils/comfy_trigger.py:output_redirected()` reports this (true
+only when *every* `SLACK_OUTPUT` node is wired), and the listener uses it to word
+its confirmation: a redirected run promises "the result will be delivered
+automatically" rather than "the result will post here". The submit-confirmation
+itself still posts to the sender's thread so the requester knows the job was
+queued.
+
 The thread already fixes the destination channel, so the value travelling over
 the `thread_ts` socket is not a bare `ts` but a `"<channel_id>@<ts>"` reference
 (`utils/thread_root.py:encode_thread_ref()`; the channel is resolved with

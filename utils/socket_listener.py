@@ -67,13 +67,31 @@ def _replace_buttons(channel: str, message_ts: str | None, text: str) -> None:
         pass
 
 
+def _queued_msg(label: str, prompt_id: str, redirected: bool) -> str:
+    """Confirmation line for a single queued run.
+
+    When *redirected* (the workflow routes its result elsewhere via a wired
+    Slack Thread Start), it must not promise the result will post in this thread.
+    """
+    if redirected:
+        tail = "the result will be delivered automatically when it's done."
+    else:
+        tail = "the result will post here shortly."
+    return f"Queued :white_check_mark: *{label}* (id `{prompt_id}`) — {tail}"
+
+
 def _fan_out(workflow, req, batches, channel: str, thread_ts: str | None) -> None:
     """Queue one ComfyUI run per batch, then post a single summary reply."""
     ids = [comfy_trigger.run(workflow, req, batch) for batch in batches]
+    redirected = comfy_trigger.output_redirected(workflow.graph)
+    if redirected:
+        tail = "each result will be delivered automatically as it finishes."
+    else:
+        tail = "results will post here as each finishes."
     slack_messages.post_text(
         _web_client, channel,
         f"Queued :white_check_mark: {len(ids)} run(s) of *{workflow.label}* — "
-        "results will post here as each finishes.",
+        + tail,
         thread_ts,
     )
 
@@ -93,10 +111,10 @@ def _dispatch_plan(workflow, req, channel: str, message_ts: str | None,
     elif isinstance(plan, router.RunOnce):
         _replace_buttons(channel, message_ts, f"Running *{workflow.label}*…")
         prompt_id = comfy_trigger.run(workflow, req, plan.images)
+        redirected = comfy_trigger.output_redirected(workflow.graph)
         slack_messages.post_text(
             _web_client, channel,
-            f"Queued :white_check_mark: *{workflow.label}* (id `{prompt_id}`) — "
-            "the result will post here shortly.",
+            _queued_msg(workflow.label, prompt_id, redirected),
             thread_ts,
         )
     elif isinstance(plan, router.ConfirmFanOut):
@@ -247,10 +265,10 @@ def _handle_confirm(req, workflow_name: str | None, kind: str, channel: str,
     elif isinstance(plan, router.RunOnce):
         _replace_buttons(channel, message_ts, f"Running *{label}*…")
         prompt_id = comfy_trigger.run(workflow, req, plan.images)
+        redirected = comfy_trigger.output_redirected(workflow.graph)
         slack_messages.post_text(
             _web_client, channel,
-            f"Queued :white_check_mark: *{label}* (id `{prompt_id}`) — "
-            "the result will post here shortly.",
+            _queued_msg(label, prompt_id, redirected),
             thread_ts,
         )
     else:  # Rejected — images no longer line up (shouldn't normally happen)
