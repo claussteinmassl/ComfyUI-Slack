@@ -3,6 +3,7 @@ import os
 from ..utils.slack_client import get_client, post_message_to_slack
 from ..utils.markdown_to_slack import markdown_to_mrkdwn
 from ..utils.local_save import resolve_save_path, SAVE_LOCATIONS
+from ..utils.thread_root import split_thread_ref
 
 
 class SlackSendText:
@@ -31,6 +32,13 @@ class SlackSendText:
     def send(self, text, channel, filename_prefix, save_output, save_location, output_folder, thread_ts="", user_id=""):
         body = markdown_to_mrkdwn(text)
         message = f"<@{user_id}> {body}".strip() if user_id else body
+
+        # A Slack Thread Start node carries its channel in the thread reference,
+        # so the thread's channel wins and this node's own channel is ignored
+        # (its widget is disabled in the editor). A bare ts (listener-injected)
+        # leaves channel untouched.
+        thread_channel, thread_ts = split_thread_ref(thread_ts)
+        channel = thread_channel or channel
 
         # Save the original Markdown source before posting, so the saved
         # artifact persists even if the Slack call fails.

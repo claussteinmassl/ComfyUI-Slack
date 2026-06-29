@@ -20,10 +20,12 @@ class _FakeClient:
 
 @pytest.fixture(autouse=True)
 def _stub_resolve_and_clear(monkeypatch):
-    # post_message_to_slack resolves the channel; pin it to a valid id and start
-    # each test with an empty reuse cache.
+    # Both thread_root (to embed the channel in the ref) and post_message_to_slack
+    # (internally) resolve the channel; pin both to a valid id and start each test
+    # with an empty reuse cache.
     from utils import slack_client
     monkeypatch.setattr(slack_client, "resolve_destination", lambda c, ch: "C012345678")
+    monkeypatch.setattr(thread_root, "resolve_destination", lambda c, ch: "C012345678")
     thread_root._thread_roots.clear()
 
 
@@ -33,6 +35,21 @@ def test_new_mode_posts_every_call():
     ts2 = thread_root.resolve_thread_root(client, "#g", "hi", reuse=False, key="k")
     assert ts1 != ts2                 # a fresh root each time
     assert len(client.posts) == 2
+
+
+def test_ref_embeds_resolved_channel_and_ts():
+    client = _FakeClient()
+    ref = thread_root.resolve_thread_root(client, "#g", "hi", reuse=False, key="k")
+    channel, ts = thread_root.split_thread_ref(ref)
+    assert channel == "C012345678"      # resolved channel travels with the ref
+    assert ts == "1700000001.000000"    # first post's ts, unwrapped from the ref
+
+
+def test_split_thread_ref_passes_bare_ts_through():
+    # A listener-injected bare ts has no channel — the send node keeps its own.
+    assert thread_root.split_thread_ref("1700000001.000000") == (None, "1700000001.000000")
+    assert thread_root.split_thread_ref("") == (None, "")
+
 
 
 def test_reuse_mode_posts_once_per_key():

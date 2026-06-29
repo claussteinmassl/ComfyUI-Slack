@@ -8,6 +8,7 @@ import imageio_ffmpeg
 
 from ..utils.slack_client import get_client, upload_file_to_slack
 from ..utils.local_save import resolve_save_path, SAVE_LOCATIONS
+from ..utils.thread_root import split_thread_ref
 
 # Audio is encoded by piping raw interleaved f32le samples to FFmpeg, the same
 # binary and input format the video node uses when muxing audio.
@@ -52,6 +53,13 @@ class SlackSendAudio:
         settings = _AUDIO_SETTINGS[format]
         ext = settings["ext"]
         comment = f"<@{user_id}> {message}".strip() if user_id else message
+
+        # A Slack Thread Start node carries its channel in the thread reference,
+        # so the thread's channel wins and this node's own channel is ignored
+        # (its widget is disabled in the editor). A bare ts (listener-injected)
+        # leaves channel untouched.
+        thread_channel, thread_ts = split_thread_ref(thread_ts)
+        channel = thread_channel or channel
 
         waveform = audio["waveform"]  # [B, channels, samples]
         sample_rate = int(audio["sample_rate"])

@@ -24,8 +24,9 @@ ComfyUI-Slack/
 │   ├── thread_root.py           # resolve_thread_root() — posts/caches the Slack Thread Start root message
 │   └── local_save.py            # resolve_save_path() + SAVE_LOCATIONS for the "Save output" toggle
 ├── js/
-│   ├── slack_save_output.js          # moves the save group to the bottom + greys it out per save_output / save_location
-│   └── slack_hide_listener_fields.js # hides the listener-only user_id widget on all send nodes
+│   ├── slack_save_output.js               # moves the save group to the bottom + greys it out per save_output / save_location
+│   ├── slack_hide_listener_fields.js      # hides the listener-only user_id widget on all send nodes
+│   └── slack_disable_channel_on_thread.js # greys out the channel widget while the thread_ts input is connected
 ├── requirements.txt
 └── pyproject.toml
 ```
@@ -104,6 +105,17 @@ The root is created with `chat_postMessage` (which reliably returns the message
 `SlackThreadStart` is `OUTPUT_NODE = False` and has `RETURN_TYPES = ("STRING",)`
 / `RETURN_NAMES = ("thread_ts",)`. Leaving a send node's `thread_ts`
 unconnected posts to the channel root as before.
+
+The thread already fixes the destination channel, so the value travelling over
+the `thread_ts` socket is not a bare `ts` but a `"<channel_id>@<ts>"` reference
+(`utils/thread_root.py:encode_thread_ref()`; the channel is resolved with
+`resolve_destination` so a `@user` becomes the DM's `D…` id). Each send node
+calls `split_thread_ref()` first: when a channel is embedded it **overrides** the
+node's own `channel` field, so that field becomes redundant — `js/slack_disable_channel_on_thread.js`
+greys out the `channel` widget whenever the `thread_ts` input is connected, and
+re-enables it when disconnected. A bare `ts` (the literal the listener injects,
+alongside its own `channel`) has no separator, so `split_thread_ref()` returns
+`(None, ts)` and the node keeps using its `channel` field.
 
 ## ComfyUI Custom Node Conventions
 

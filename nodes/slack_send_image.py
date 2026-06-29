@@ -7,6 +7,7 @@ from PIL import Image
 
 from ..utils.slack_client import get_client, upload_file_to_slack
 from ..utils.local_save import resolve_save_path, SAVE_LOCATIONS
+from ..utils.thread_root import split_thread_ref
 
 _FORMAT_EXT = {
     "PNG": "png",
@@ -46,6 +47,13 @@ class SlackSendImage:
         client = get_client()
         ext = _FORMAT_EXT[format]
         comment = f"<@{user_id}> {message}".strip() if user_id else message
+
+        # A Slack Thread Start node carries its channel in the thread reference,
+        # so the thread's channel wins and this node's own channel is ignored
+        # (its widget is disabled in the editor). A bare ts (listener-injected)
+        # leaves channel untouched.
+        thread_channel, thread_ts = split_thread_ref(thread_ts)
+        channel = thread_channel or channel
 
         for i, img_tensor in enumerate(images):
             arr = np.clip(255.0 * img_tensor.cpu().numpy(), 0, 255).astype(np.uint8)

@@ -8,6 +8,7 @@ import imageio_ffmpeg
 
 from ..utils.slack_client import get_client, upload_file_to_slack
 from ..utils.local_save import resolve_save_path, SAVE_LOCATIONS
+from ..utils.thread_root import split_thread_ref
 
 # codec: (extension, crf_max or None, extra_args_fn)
 # quality INT 0-100: 100 = best (CRF 0), 0 = worst (CRF max)
@@ -90,6 +91,13 @@ class SlackSendVideo:
         codec = _CODEC_SETTINGS[format]
         ext = codec["ext"]
         comment = f"<@{user_id}> {message}".strip() if user_id else message
+
+        # A Slack Thread Start node carries its channel in the thread reference,
+        # so the thread's channel wins and this node's own channel is ignored
+        # (its widget is disabled in the editor). A bare ts (listener-injected)
+        # leaves channel untouched.
+        thread_channel, thread_ts = split_thread_ref(thread_ts)
+        channel = thread_channel or channel
 
         first = _pad_to_even(images[0].cpu().numpy())
         h, w = first.shape[:2]
