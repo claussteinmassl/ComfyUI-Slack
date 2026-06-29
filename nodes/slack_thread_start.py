@@ -23,7 +23,7 @@ class SlackThreadStart:
     FUNCTION = "start"
 
     MODES = ["New thread each run", "Reuse existing thread"]
-    _DEFAULT_HEADER = "🧵 ComfyUI"
+    _DEFAULT_HEADER = "Your ComfyUI generations are here!"
 
     @classmethod
     def INPUT_TYPES(cls):
