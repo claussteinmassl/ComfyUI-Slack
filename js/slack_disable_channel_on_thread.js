@@ -20,7 +20,15 @@ function threadConnected(node) {
 
 function refreshChannel(node) {
     const channel = node.widgets?.find((w) => w.name === "channel");
-    if (channel) channel.disabled = threadConnected(node);
+    if (!channel) return;
+    const disabled = threadConnected(node);
+    // Two widget render paths read two different flags: canvas (litegraph)
+    // widgets honour widget.disabled, Vue/DOM widgets honour
+    // widget.options.disabled. Set both so the field greys out regardless.
+    channel.disabled = disabled;
+    channel.options = channel.options || {};
+    channel.options.disabled = disabled;
+    node.setDirtyCanvas?.(true, true);
 }
 
 app.registerExtension({
@@ -31,16 +39,26 @@ app.registerExtension({
         const origCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             origCreated?.apply(this, arguments);
-            refreshChannel(this);
-        };
 
-        // Fires on every connect/disconnect (including link restoration on graph
-        // load); re-reads the current link state, so we don't filter by slot.
-        const origConn = nodeType.prototype.onConnectionsChange;
-        nodeType.prototype.onConnectionsChange = function () {
-            const r = origConn?.apply(this, arguments);
+            // Chain the connection watcher onto the instance: ComfyUI installs
+            // its own instance-level onConnectionsChange, so an instance chain is
+            // the reliable place to react (a prototype override can be shadowed).
+            const instConn = this.onConnectionsChange;
+            this.onConnectionsChange = function () {
+                const r = instConn?.apply(this, arguments);
+                refreshChannel(this);
+                return r;
+            };
+
             refreshChannel(this);
-            return r;
         };
+    },
+
+    // Links are restored after node creation when loading a saved graph; sync
+    // every target node once the graph is fully configured.
+    afterConfigureGraph() {
+        for (const node of app.graph?._nodes || []) {
+            if (TARGET.has(node.comfyClass)) refreshChannel(node);
+        }
     },
 });
